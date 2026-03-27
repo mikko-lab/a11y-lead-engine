@@ -32,19 +32,22 @@ async function cmdDiscover() {
   const sendEmail = args.includes('--email')
 
   // Automaattinen haku: pnpm discover --duckduckgo tai pnpm discover --yritykset
-  if (source === '--duckduckgo' || source === '--yritykset') {
-    const { discoverFromDuckDuckGo, discoverFromYritykset } = await import('./discovery/index')
+  if (source === '--duckduckgo' || source === '--yritykset' || source === '--tranco') {
+    const { discoverFromDuckDuckGo, discoverFromYritykset, discoverFromTranco } = await import('./discovery/index')
     const limitIdx = args.indexOf('--limit')
     const limit = limitIdx !== -1 ? parseInt(args[limitIdx + 1]) : 50
 
     console.log(`\nA11Y Lead Engine — Automaattinen löytö`)
-    console.log(`Lähde: ${source === '--duckduckgo' ? 'DuckDuckGo-haku' : 'yritykset.fi'}`)
+    const sourceLabel = source === '--duckduckgo' ? 'DuckDuckGo-haku' : source === '--tranco' ? 'Tranco .fi-lista' : 'yritykset.fi'
+    console.log(`Lähde: ${sourceLabel}`)
     console.log(`Maksimi: ${limit} domainia`)
     console.log(`Lähetä sähköposti: ${sendEmail ? 'kyllä' : 'ei'}`)
     console.log('─────────────────────────────────────\n')
 
     const result = source === '--duckduckgo'
       ? await discoverFromDuckDuckGo({ limit, sendEmail })
+      : source === '--tranco'
+      ? await discoverFromTranco({ limit, sendEmail })
       : await discoverFromYritykset({ sendEmail })
 
     console.log('\n─────────────────────────────────────')
@@ -61,9 +64,10 @@ async function cmdDiscover() {
   if (!source || !fs.existsSync(source)) {
     console.error('Käyttö:')
     console.error('  pnpm discover domains.txt           Skannaa lista tiedostosta')
+    console.error('  pnpm discover --tranco               Hae .fi-domaineja Tranco-listasta')
     console.error('  pnpm discover --duckduckgo           Hae WP-sivustoja automaattisesti')
     console.error('  pnpm discover --yritykset            Hae yritykset.fi -hakemistosta')
-    console.error('  pnpm discover --duckduckgo --limit 100 --email')
+    console.error('  pnpm discover --tranco --limit 500 --email')
     process.exit(1)
   }
 
@@ -132,9 +136,9 @@ async function main() {
       console.log('  pnpm scan <url> --email            Skannaa + lähetä sähköposti automaattisesti')
       console.log('  pnpm scan <url> --to osoite@fi     Skannaa + lähetä tähän osoitteeseen')
       console.log('  pnpm discover domains.txt          Skannaa lista tiedostosta')
-      console.log('  pnpm discover --duckduckgo         Hae WP-sivustoja automaattisesti')
-      console.log('  pnpm discover --yritykset          Hae yritykset.fi -hakemistosta')
-      console.log('  pnpm discover --duckduckgo --limit 100 --email  Hae + lähetä')
+      console.log('  pnpm discover --tranco             Hae .fi-domaineja Tranco-listasta')
+      console.log('  pnpm discover --duckduckgo         Hae WP-sivustoja hakukoneella')
+      console.log('  pnpm discover --tranco --limit 500 --email  Hae + skannaa + lähetä')
       console.log('  pnpm leads                         Näytä viimeisimmät leadit')
       console.log('  pnpm worker                        Käynnistä worker-prosessi')
       console.log('')

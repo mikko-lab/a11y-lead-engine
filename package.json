@@ -13,12 +13,14 @@
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",
+    "@types/unzipper": "^0.10.11",
     "bullmq": "^5.13.0",
     "dotenv": "^16.4.5",
     "ioredis": "^5.4.1",
     "jspdf": "^2.5.2",
     "nodemailer": "^6.9.15",
-    "playwright": "^1.48.0"
+    "playwright": "^1.48.0",
+    "unzipper": "^0.12.3"
   },
   "devDependencies": {
     "@types/node": "^22.7.5",

@@ -2,6 +2,7 @@ import { chromium } from 'playwright'
 import { addScanJob } from '../queue'
 import { searchWordPressSites, WP_QUERIES } from './duckduckgo'
 import { scrapeYritykset, CATEGORIES } from './yritykset'
+import { getFiDomains } from './tranco'
 
 export async function detectWordPress(url: string): Promise<boolean> {
   const browser = await chromium.launch({ headless: true, args: ['--no-sandbox'] })
@@ -46,6 +47,18 @@ export async function discoverFromDuckDuckGo(opts: {
   }
 
   return queueWordPressSites([...allUrls], { sendEmail, onProgress })
+}
+
+export async function discoverFromTranco(opts: {
+  limit?: number
+  sendEmail?: boolean
+  onProgress?: (msg: string) => void
+}): Promise<DiscoveryResult> {
+  const { limit = 200, sendEmail = false, onProgress = console.log } = opts
+  onProgress(`  Haetaan top-${limit} .fi-domainia Tranco-listasta...`)
+  const urls = await getFiDomains(limit)
+  onProgress(`  Löydettiin ${urls.length} .fi-domainia`)
+  return queueWordPressSites(urls, { sendEmail, onProgress })
 }
 
 export async function discoverFromYritykset(opts: {

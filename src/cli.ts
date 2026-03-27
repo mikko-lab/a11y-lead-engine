@@ -28,18 +28,47 @@ async function cmdScan() {
 }
 
 async function cmdDiscover() {
-  const file = args[0]
-  if (!file || !fs.existsSync(file)) {
-    console.error('Käyttö: pnpm discover domains.txt')
-    console.error('\ndomain.txt formaatti (yksi per rivi):')
-    console.error('  https://esimerkki.fi')
-    console.error('  toinen.fi')
+  const source = args[0]
+  const sendEmail = args.includes('--email')
+
+  // Automaattinen haku: pnpm discover --duckduckgo tai pnpm discover --yritykset
+  if (source === '--duckduckgo' || source === '--yritykset') {
+    const { discoverFromDuckDuckGo, discoverFromYritykset } = await import('./discovery/index')
+    const limitIdx = args.indexOf('--limit')
+    const limit = limitIdx !== -1 ? parseInt(args[limitIdx + 1]) : 50
+
+    console.log(`\nA11Y Lead Engine — Automaattinen löytö`)
+    console.log(`Lähde: ${source === '--duckduckgo' ? 'DuckDuckGo-haku' : 'yritykset.fi'}`)
+    console.log(`Maksimi: ${limit} domainia`)
+    console.log(`Lähetä sähköposti: ${sendEmail ? 'kyllä' : 'ei'}`)
+    console.log('─────────────────────────────────────\n')
+
+    const result = source === '--duckduckgo'
+      ? await discoverFromDuckDuckGo({ limit, sendEmail })
+      : await discoverFromYritykset({ sendEmail })
+
+    console.log('\n─────────────────────────────────────')
+    console.log(`Löydettiin:     ${result.found} domainia`)
+    console.log(`WordPress:      ${result.wordpress} sivustoa`)
+    console.log(`Jonoon lisätty: ${result.queued} skannausta`)
+    console.log('\nKäynnistä worker: pnpm worker')
+
+    await scanQueue.close()
+    process.exit(0)
+  }
+
+  // Tiedostosta: pnpm discover domains.txt
+  if (!source || !fs.existsSync(source)) {
+    console.error('Käyttö:')
+    console.error('  pnpm discover domains.txt           Skannaa lista tiedostosta')
+    console.error('  pnpm discover --duckduckgo           Hae WP-sivustoja automaattisesti')
+    console.error('  pnpm discover --yritykset            Hae yritykset.fi -hakemistosta')
+    console.error('  pnpm discover --duckduckgo --limit 100 --email')
     process.exit(1)
   }
 
-  const sendEmail = args.includes('--email')
-  const lines = fs.readFileSync(file, 'utf-8').split('\n').map((l) => l.trim()).filter(Boolean)
-  console.log(`Löydettiin ${lines.length} domainia tiedostosta ${file}`)
+  const lines = fs.readFileSync(source, 'utf-8').split('\n').map((l) => l.trim()).filter(Boolean)
+  console.log(`Löydettiin ${lines.length} domainia tiedostosta ${source}`)
 
   let added = 0
   for (const url of lines) {
@@ -102,8 +131,10 @@ async function main() {
       console.log('  pnpm scan <url>                    Skannaa yksi sivu')
       console.log('  pnpm scan <url> --email            Skannaa + lähetä sähköposti automaattisesti')
       console.log('  pnpm scan <url> --to osoite@fi     Skannaa + lähetä tähän osoitteeseen')
-      console.log('  pnpm discover domains.txt          Skannaa lista domaineista')
-      console.log('  pnpm discover domains.txt --email  Skannaa + lähetä kaikille')
+      console.log('  pnpm discover domains.txt          Skannaa lista tiedostosta')
+      console.log('  pnpm discover --duckduckgo         Hae WP-sivustoja automaattisesti')
+      console.log('  pnpm discover --yritykset          Hae yritykset.fi -hakemistosta')
+      console.log('  pnpm discover --duckduckgo --limit 100 --email  Hae + lähetä')
       console.log('  pnpm leads                         Näytä viimeisimmät leadit')
       console.log('  pnpm worker                        Käynnistä worker-prosessi')
       console.log('')

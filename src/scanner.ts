@@ -1,4 +1,7 @@
 import { chromium } from 'playwright'
+import path from 'path'
+
+const AXE_PATH = path.join(process.cwd(), 'node_modules/axe-core/axe.min.js')
 
 export interface Violation {
   id: string
@@ -36,9 +39,7 @@ export async function scanUrl(url: string): Promise<ScanResult> {
     await page.goto(normalized, { waitUntil: 'networkidle', timeout: 30000 })
     await page.waitForTimeout(2000)
 
-    await page.addScriptTag({
-      url: 'https://cdnjs.cloudflare.com/ajax/libs/axe-core/4.9.1/axe.min.js',
-    })
+    await page.addScriptTag({ path: AXE_PATH })
 
     const raw = await page.evaluate(async () => {
       return await (window as any).axe.run({

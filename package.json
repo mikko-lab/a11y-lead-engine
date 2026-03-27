@@ -14,6 +14,7 @@
   "dependencies": {
     "@prisma/client": "^5.22.0",
     "@types/unzipper": "^0.10.11",
+    "axe-core": "^4.11.1",
     "bullmq": "^5.13.0",
     "dotenv": "^16.4.5",
     "ioredis": "^5.4.1",

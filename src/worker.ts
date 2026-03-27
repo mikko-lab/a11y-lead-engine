@@ -78,7 +78,7 @@ async function processJob(job: Job<ScanJobData>) {
   })
 
   // 7. Send email
-  if (sendEmail && email) {
+  if (email) {
     await job.updateProgress(90)
     console.log(`  Lähetetään sähköposti → ${email}`)
     await sendReport({ to: email, scan, pdf, senderName: SENDER_NAME, senderUrl: SENDER_URL })

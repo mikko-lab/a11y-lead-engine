@@ -20,7 +20,7 @@ async function cmdScan() {
   const job = await addScanJob({ url, sendEmail, emailOverride })
   console.log(`Työ lisätty jonoon. ID: ${job.id}`)
   console.log(`URL: ${url}`)
-  console.log(`Lähetä sähköposti: ${sendEmail ? (emailOverride ?? 'automaattinen haku') : 'ei'}`)
+  console.log(`Lähetä sähköposti: ${emailOverride ?? (sendEmail ? 'automaattinen haku' : 'ei')}`)
   console.log('\nKäynnistä worker toisessa terminaalissa: pnpm worker')
 
   await scanQueue.close()

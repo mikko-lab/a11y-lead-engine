@@ -72,7 +72,7 @@ export async function sendReport(opts: {
 
   <p>Saavutettavuusvaatimukset koskevat yhä useampia sivustoja, ja puutteet voivat johtaa oikeudellisiin riskeihin. Autamme korjaamaan ongelmat nopeasti.</p>
 
-  <a href="${senderUrl}" style="display: inline-block; background: #00D4AA; color: #0A2540; font-weight: 700; padding: 12px 24px; border-radius: 8px; text-decoration: none; margin: 8px 0;">
+  <a href="${senderUrl}" style="display: inline-block; background: #00D4AA; color: #000000; font-weight: 700; padding: 12px 24px; border-radius: 8px; text-decoration: none; margin: 8px 0;">
     Lue lisää →
   </a>
 

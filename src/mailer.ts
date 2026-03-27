@@ -29,8 +29,20 @@ export async function sendReport(opts: {
   const html = `
 <!DOCTYPE html>
 <html lang="fi">
-<head><meta charset="UTF-8"></head>
-<body style="font-family: 'Segoe UI', sans-serif; color: #1a1a1a; max-width: 600px; margin: 0 auto; padding: 24px;">
+<head>
+<meta charset="UTF-8">
+<meta name="color-scheme" content="light">
+<meta name="supported-color-schemes" content="light">
+<style>
+  :root { color-scheme: light; }
+  body { color-scheme: light; }
+  @media (prefers-color-scheme: dark) {
+    body { background-color: #ffffff !important; color: #1a1a1a !important; }
+    .btn { color: #000000 !important; -webkit-text-fill-color: #000000 !important; }
+  }
+</style>
+</head>
+<body style="font-family: 'Segoe UI', sans-serif; color: #1a1a1a; max-width: 600px; margin: 0 auto; padding: 24px; background-color: #ffffff;">
 
   <div style="background: #0A2540; border-radius: 8px; padding: 24px 28px; margin-bottom: 24px;">
     <p style="color: #00D4AA; font-size: 13px; margin: 0 0 4px;">WCAG 2.2 AA -saavutettavuusraportti</p>
@@ -72,8 +84,8 @@ export async function sendReport(opts: {
 
   <p>Saavutettavuusvaatimukset koskevat yhä useampia sivustoja, ja puutteet voivat johtaa oikeudellisiin riskeihin. Autamme korjaamaan ongelmat nopeasti.</p>
 
-  <a href="${senderUrl}" style="display: inline-block; background: #00D4AA; color: #000000; font-weight: 700; padding: 12px 24px; border-radius: 8px; text-decoration: none; margin: 8px 0;">
-    Lue lisää →
+  <a href="${senderUrl}" class="btn" style="display: inline-block; background: #00D4AA; color: #000000 !important; -webkit-text-fill-color: #000000 !important; font-weight: 700; padding: 12px 24px; border-radius: 8px; text-decoration: none; margin: 8px 0;">
+    <span class="btn" style="color: #000000 !important; -webkit-text-fill-color: #000000 !important;">Lue lisää →</span>
   </a>
 
   <p style="margin-top: 32px; color: #888; font-size: 13px;">

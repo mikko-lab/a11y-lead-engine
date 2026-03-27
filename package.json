@@ -1,0 +1,30 @@
+{
+  "name": "a11y-lead-engine",
+  "version": "1.0.0",
+  "description": "Accessibility lead generation engine",
+  "type": "commonjs",
+  "scripts": {
+    "scan": "tsx src/cli.ts scan",
+    "worker": "tsx src/worker.ts",
+    "discover": "tsx src/cli.ts discover",
+    "db:push": "prisma db push",
+    "db:studio": "prisma studio",
+    "dev": "tsx src/worker.ts"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.22.0",
+    "bullmq": "^5.13.0",
+    "dotenv": "^16.4.5",
+    "ioredis": "^5.4.1",
+    "jspdf": "^2.5.2",
+    "nodemailer": "^6.9.15",
+    "playwright": "^1.48.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.7.5",
+    "@types/nodemailer": "^6.4.16",
+    "prisma": "^5.22.0",
+    "tsx": "^4.19.1",
+    "typescript": "^5.6.3"
+  }
+}

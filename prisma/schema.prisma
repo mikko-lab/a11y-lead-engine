@@ -1,0 +1,48 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Domain {
+  id          String   @id @default(cuid())
+  url         String   @unique
+  isWordPress Boolean  @default(false)
+  email       String?
+  company     String?
+  createdAt   DateTime @default(now())
+  scans       Scan[]
+  leads       Lead[]
+}
+
+model Scan {
+  id         String   @id @default(cuid())
+  domainId   String
+  domain     Domain   @relation(fields: [domainId], references: [id])
+  score      Int
+  critical   Int
+  serious    Int
+  moderate   Int
+  minor      Int
+  passed     Int
+  violations String
+  status     String   @default("completed")
+  scannedAt  DateTime @default(now())
+  lead       Lead?
+}
+
+model Lead {
+  id          String   @id @default(cuid())
+  domainId    String
+  domain      Domain   @relation(fields: [domainId], references: [id])
+  scanId      String   @unique
+  scan        Scan     @relation(fields: [scanId], references: [id])
+  email       String?
+  emailSent   Boolean  @default(false)
+  sentAt      DateTime?
+  pdfPath     String?
+  createdAt   DateTime @default(now())
+}

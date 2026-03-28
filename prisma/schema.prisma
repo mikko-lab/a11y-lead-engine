@@ -8,14 +8,21 @@ datasource db {
 }
 
 model Domain {
-  id          String   @id @default(cuid())
-  url         String   @unique
-  isWordPress Boolean  @default(false)
-  email       String?
-  company     String?
-  createdAt   DateTime @default(now())
-  scans       Scan[]
-  leads       Lead[]
+  id             String    @id @default(cuid())
+  url            String    @unique
+  isWordPress    Boolean   @default(false)
+  email          String?
+  company        String?
+  businessId     String?
+  tol            String?
+  tolName        String?
+  htmlHash       String?
+  htmlLength     Int?
+  lastMonitored  DateTime?
+  changePercent  Float?
+  createdAt      DateTime  @default(now())
+  scans          Scan[]
+  leads          Lead[]
 }
 
 model Scan {

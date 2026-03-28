@@ -1,27 +1,11 @@
-import { chromium } from 'playwright'
 import { addScanJob } from '../queue'
 import { searchWordPressSites, WP_QUERIES } from './duckduckgo'
 import { scrapeYritykset, CATEGORIES } from './yritykset'
 import { getFiDomains } from './tranco'
+import { preFilter } from '../prefilter'
+import { lookupYTJ } from '../ytj'
 
-export async function detectWordPress(url: string): Promise<boolean> {
-  const browser = await chromium.launch({ headless: true, args: ['--no-sandbox'] })
-  try {
-    const page = await browser.newPage()
-    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 15000 })
-    const html = await page.content()
-    return (
-      html.includes('wp-content') ||
-      html.includes('wp-includes') ||
-      html.includes('wp-json') ||
-      html.includes('/wp-login')
-    )
-  } catch {
-    return false
-  } finally {
-    await browser.close()
-  }
-}
+export { CATEGORIES }
 
 export interface DiscoveryResult {
   found: number
@@ -29,11 +13,14 @@ export interface DiscoveryResult {
   queued: number
 }
 
-export async function discoverFromDuckDuckGo(opts: {
+export interface DiscoveryOpts {
   limit?: number
   sendEmail?: boolean
+  tolFilter?: string[]
   onProgress?: (msg: string) => void
-}): Promise<DiscoveryResult> {
+}
+
+export async function discoverFromDuckDuckGo(opts: DiscoveryOpts): Promise<DiscoveryResult> {
   const { limit = 50, sendEmail = false, onProgress = console.log } = opts
   const perQuery = Math.ceil(limit / WP_QUERIES.length)
   const allUrls = new Set<string>()
@@ -46,26 +33,20 @@ export async function discoverFromDuckDuckGo(opts: {
     await sleep(2000) // kohteliaisuusviive
   }
 
-  return queueWordPressSites([...allUrls], { sendEmail, onProgress })
+  return queueWordPressSites([...allUrls], { sendEmail, tolFilter: opts.tolFilter, onProgress })
 }
 
-export async function discoverFromTranco(opts: {
-  limit?: number
-  sendEmail?: boolean
-  onProgress?: (msg: string) => void
-}): Promise<DiscoveryResult> {
+export async function discoverFromTranco(opts: DiscoveryOpts): Promise<DiscoveryResult> {
   const { limit = 200, sendEmail = false, onProgress = console.log } = opts
   onProgress(`  Haetaan top-${limit} .fi-domainia Tranco-listasta...`)
   const urls = await getFiDomains(limit)
   onProgress(`  Löydettiin ${urls.length} .fi-domainia`)
-  return queueWordPressSites(urls, { sendEmail, onProgress })
+  return queueWordPressSites(urls, { sendEmail, tolFilter: opts.tolFilter, onProgress })
 }
 
-export async function discoverFromYritykset(opts: {
+export async function discoverFromYritykset(opts: DiscoveryOpts & {
   categories?: string[]
   limitPerCategory?: number
-  sendEmail?: boolean
-  onProgress?: (msg: string) => void
 }): Promise<DiscoveryResult> {
   const {
     categories = CATEGORIES.slice(0, 3),
@@ -83,30 +64,42 @@ export async function discoverFromYritykset(opts: {
     await sleep(1500)
   }
 
-  return queueWordPressSites([...allUrls], { sendEmail, onProgress })
+  return queueWordPressSites([...allUrls], { sendEmail, tolFilter: opts.tolFilter, onProgress })
 }
 
 async function queueWordPressSites(
   urls: string[],
-  opts: { sendEmail: boolean; onProgress: (msg: string) => void }
+  opts: { sendEmail: boolean; tolFilter?: string[]; onProgress: (msg: string) => void }
 ): Promise<DiscoveryResult> {
-  const { sendEmail, onProgress } = opts
+  const { sendEmail, tolFilter, onProgress } = opts
   let wordpress = 0
   let queued = 0
 
-  onProgress(`\n  Tarkistetaan ${urls.length} domainia WordPress-tunnistuksella...`)
+  onProgress(`\n  Tarkistetaan ${urls.length} domainia (pre-filter)...`)
 
   for (const url of urls) {
     try {
-      const isWP = await detectWordPress(url)
-      if (isWP) {
-        wordpress++
-        await addScanJob({ url, sendEmail })
-        queued++
-        onProgress(`  ✓ WordPress: ${url}`)
-      } else {
-        onProgress(`  – Ei WP:   ${url}`)
+      const filter = await preFilter(url)
+      if (!filter.pass) {
+        onProgress(`  – Hylätty (${filter.reason}): ${url}`)
+        continue
       }
+
+      // TOL-suodatus: jos toimialasuodatus on päällä, tarkista YTJ
+      if (tolFilter && tolFilter.length > 0) {
+        const hostname = new URL(url.startsWith('http') ? url : `https://${url}`).hostname
+        const ytj = await lookupYTJ(hostname)
+        if (ytj && !tolFilter.includes(ytj.tol)) {
+          onProgress(`  – TOL ${ytj.tol} (${ytj.tolName}) ei kuulu kohderyhmään: ${url}`)
+          continue
+        }
+        if (ytj) onProgress(`  ✓ TOL ${ytj.tol} ${ytj.tolName}: ${url}`)
+      }
+
+      if (filter.isWP) wordpress++
+      await addScanJob({ url, sendEmail })
+      queued++
+      onProgress(`  ✓ Jonoon: ${url}`)
     } catch {
       continue
     }

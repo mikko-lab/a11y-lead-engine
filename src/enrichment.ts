@@ -1,4 +1,5 @@
 import { chromium } from 'playwright'
+import { lookupKontakto, pickBestEmail } from './kontakto'
 
 const EMAIL_RE = /[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/g
 
@@ -15,13 +16,20 @@ const CONTACT_PATHS = [
 export async function findEmail(baseUrl: string): Promise<string | null> {
   const domain = new URL(baseUrl).hostname.replace('www.', '')
 
-  // 1. Hunter.io (luotettavin)
+  // 1. Kontakto (suomalaiset päätöksentekijät)
+  const kontakto = await lookupKontakto(baseUrl)
+  if (kontakto) {
+    const email = pickBestEmail(kontakto)
+    if (email) return email
+  }
+
+  // 2. Hunter.io
   if (process.env.HUNTER_API_KEY) {
     const email = await hunterLookup(domain)
     if (email) return email
   }
 
-  // 2. Sivuston scrape varalla
+  // 3. Sivuston scrape varalla
   return scrapeSite(baseUrl)
 }
 

@@ -277,6 +277,30 @@ export function generatePdf(scan: ScanResult, senderName: string, senderUrl: str
     y += estH + 4
   }
 
+  // ── CTA ──────────────────────────────────────────────────────────────────
+  checkBreak(36)
+  y += 6
+  const ctaH = 30
+  doc.setFillColor(10, 37, 64)
+  doc.roundedRect(margin, y, cW, ctaH, 3, 3, 'F')
+
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(12)
+  doc.setTextColor(255, 255, 255)
+  doc.text('Haluatteko ongelmat korjattua?', margin + cW / 2, y + 11, { align: 'center' })
+
+  doc.setFont('helvetica', 'normal')
+  doc.setFontSize(9)
+  doc.setTextColor(0, 212, 170)
+  doc.text('Tilaa saavutettavuusauditointi', margin + cW / 2, y + 18, { align: 'center' })
+
+  doc.setFont('helvetica', 'normal')
+  doc.setFontSize(8.5)
+  doc.setTextColor(148, 163, 184)
+  doc.text(senderUrl + '#hinnoittelu', margin + cW / 2, y + 24, { align: 'center' })
+
+  y += ctaH + 6
+
   // ── Footers ───────────────────────────────────────────────────────────────
   const total = (doc.internal as any).getNumberOfPages()
   for (let p = 1; p <= total; p++) {

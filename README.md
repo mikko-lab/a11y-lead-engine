@@ -8,12 +8,13 @@ Automaattinen saavutettavuusskanneri ja lead-generointimoottori WordPress-sivust
 
 - **Pre-filter** — nopea fetch-pohjainen esitarkistus ennen raskasta skannausta (kieli, CTA, WordPress-tunnistus)
 - **WCAG 2.2 AA -skannaus** — axe-core + Playwright, pisteet 0–100
-- **PDF-raportti** — yksityiskohtainen raportti löydetyistä ongelmista ja korjausehdotuksista
+- **PDF-raportti** — yksityiskohtainen raportti löydetyistä ongelmista, korjausehdotuksista ja CTA hinnastoon
 - **Sähköpostilähetys** — personoitu viesti löydetylle kontaktille, raportti liitteenä
 - **Sähköpostin etsintä** — Kontakto → Hunter.io → sivuston scrape
-- **YTJ-integraatio** — hakee Y-tunnuksen ja TOL-toimialakoodin PRH:n avoimesta datasta
+- **YTJ-integraatio** — hakee Y-tunnuksen ja TOL-toimialakoodin PRH:n avoimesta datasta (ilmainen)
 - **Toimialasuodatus** — kohdista ajo valituille TOL-toimialoille
-- **Web-dashboard** — leadit, tilastot, manuaalinen sähköpostilähetys, uuden ajon käynnistys live-lokilla
+- **Muutosseuranta** — seuraa domainien HTML-muutoksia, laukaisee uuden skannauksen automaattisesti jos muutos ≥ 20 %
+- **Web-dashboard** — leadit, tilastot, uuden ajon käynnistys, seuranta — kaikki live-lokilla
 
 ---
 
@@ -68,10 +69,13 @@ pnpm dashboard
 
 Avaa selaimessa: http://localhost:3030
 
-Dashboardissa voit:
-- Selata ja suodattaa leadeja
-- Lähettää raportteja manuaalisesti
-- Käynnistää uuden ajon valitsemalla hakemiston ja toimialan
+Dashboardissa on kolme välilehteä:
+
+| Välilehti | Kuvaus |
+|---|---|
+| **Leadit** | Kaikki skannatut domainit, pisteet, yritystiedot, TOL-koodi, sähköpostien lähetys |
+| **Uusi ajo** | Valitse hakemisto (DuckDuckGo / Tranco / yritykset.fi), toimialasuodatus, käynnistä live-lokilla |
+| **Seuranta** | Muutosseuranta — tarkistaa HTML-muutokset, laukaisee skannauksen automaattisesti |
 
 ### Komentorivi
 
@@ -93,6 +97,10 @@ pnpm discover --yritykset
 # Tiedostosta
 pnpm discover domains.txt --email
 
+# Muutosseuranta (kaikki kannan domainit)
+pnpm monitor
+pnpm monitor --email
+
 # Näytä viimeisimmät leadit
 pnpm leads
 ```
@@ -104,16 +112,17 @@ pnpm leads
 ```
 src/
   cli.ts          — komentorivi-käyttöliittymä
-  dashboard.ts    — Express-palvelin + web-UI
+  dashboard.ts    — Express-palvelin + web-UI (Leadit / Uusi ajo / Seuranta)
   worker.ts       — BullMQ-worker, käsittelee skannausjonon
   queue.ts        — Redis/BullMQ-jono
   scanner.ts      — axe-core + Playwright -skannaus
   prefilter.ts    — nopea fetch-pohjainen esitarkistus
+  monitor.ts      — HTML-muutosseuranta, trigger-pohjainen skannaus
   enrichment.ts   — sähköpostin etsintä (Kontakto → Hunter → scrape)
-  ytj.ts          — PRH open data -integraatio
+  ytj.ts          — PRH open data -integraatio (Y-tunnus, TOL)
   kontakto.ts     — Kontakto B2B -integraatio
   mailer.ts       — sähköpostilähetys + HTML-pohja
-  pdf.ts          — PDF-raportin generointi
+  pdf.ts          — PDF-raportin generointi (jsPDF)
   discovery/
     duckduckgo.ts — WordPress-sivustojen haku
     tranco.ts     — Tranco .fi -domainlista
@@ -123,27 +132,41 @@ src/
 ### Skannauksen kulku
 
 1. **Pre-filter** — onko sivu elossa, kieli fi/en/sv, löytyykö CTA/lomake
-2. **Skannaus** — axe-core ajaa WCAG 2.2 AA -tarkistuksen
+2. **Skannaus** — axe-core ajaa WCAG 2.2 AA -tarkistuksen Playwrightilla
 3. **Sähköpostin haku** — Kontakto → Hunter.io → sivuston scrape
 4. **YTJ-haku** — yrityksen nimi, Y-tunnus ja TOL-toimialakoodi
 5. **Tallennus** — Prisma/SQLite
 6. **PDF-generointi** — jsPDF
 7. **Sähköpostilähetys** — nodemailer SMTP
 
+### Muutosseuranta
+
+```
+1. ajo → baseline tallennetaan (hash + pituus)
+2. ajo → verrataan → jos muutos ≥ 20 % → jonoon automaattisesti
+```
+
+Seuranta ei käytä Playwrightia — pelkkä `fetch`, nopea ja kevyt.
+
 ---
 
-## Toimialasuodatus
+## Toimialasuodatus (YTJ)
 
 Voit kohdistaa ajon halutuille TOL-toimialoille. YTJ tarkistetaan jokaisen domainin kohdalla — muut toimialat ohitetaan, tuntemattomia ei ohiteta.
 
-Kohderyhmätoimialat oletuksena:
-- 47 Vähittäiskauppa
-- 55 Majoitustoiminta
-- 56 Ravitsemistoiminta
-- 68 Kiinteistöalan toiminta
-- 85 Koulutus
-- 86 Terveyspalvelut
-- 88 Sosiaalihuolto
+Kohderyhmätoimialat:
+
+| TOL | Toimiala |
+|---|---|
+| 47 | Vähittäiskauppa |
+| 55 | Majoitustoiminta |
+| 56 | Ravitsemistoiminta |
+| 68 | Kiinteistöalan toiminta |
+| 85 | Koulutus |
+| 86 | Terveyspalvelut |
+| 88 | Sosiaalihuolto |
+| 90 | Taiteet ja viihde |
+| 96 | Muut henkilökohtaiset palvelut |
 
 ---
 

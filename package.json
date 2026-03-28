@@ -10,6 +10,7 @@
     "db:push": "prisma db push",
     "db:studio": "prisma studio",
     "dashboard": "tsx src/dashboard.ts",
+    "monitor": "tsx src/cli.ts monitor",
     "dev": "tsx src/worker.ts"
   },
   "dependencies": {

@@ -3,11 +3,13 @@ import { Worker, Job } from 'bullmq'
 import path from 'path'
 import fs from 'fs'
 import { connection, ScanJobData } from './queue'
-import { scanUrl, detectWordPress } from './scanner'
+import { scanUrl } from './scanner'
 import { findEmail } from './enrichment'
 import { generatePdf } from './pdf'
 import { sendReport } from './mailer'
 import { db } from './db/client'
+import { preFilter } from './prefilter'
+import { lookupYTJ } from './ytj'
 
 const REPORTS_DIR = path.join(process.cwd(), 'reports')
 if (!fs.existsSync(REPORTS_DIR)) fs.mkdirSync(REPORTS_DIR)
@@ -19,21 +21,34 @@ async function processJob(job: Job<ScanJobData>) {
   const { url, sendEmail, emailOverride } = job.data
   console.log(`\n[${new Date().toLocaleTimeString('fi-FI')}] Aloitetaan: ${url}`)
 
-  // 1. Detect WordPress
-  await job.updateProgress(10)
-  const isWP = await detectWordPress(url)
-  console.log(`  WordPress: ${isWP ? 'kyllä' : 'ei'}`)
+  // 0. Pre-filter — nopea tarkistus ennen raskasta skannausta
+  await job.updateProgress(5)
+  const filter = await preFilter(url)
+  console.log(`  Pre-filter: ${filter.pass ? 'ok' : `hylätty (${filter.reason})`} | kieli: ${filter.lang ?? '?'} | WP: ${filter.isWP} | CTA: ${filter.hasCta}`)
 
-  // 2. Scan
-  await job.updateProgress(30)
+  if (!filter.pass) {
+    console.log(`  → Ohitetaan`)
+    return { skipped: true, reason: filter.reason }
+  }
+
+  // 1. Scan
+  await job.updateProgress(20)
   console.log(`  Skannataan...`)
   const scan = await scanUrl(url)
   console.log(`  Pisteet: ${scan.score}/100 | Kriittistä: ${scan.critical} | Vakavia: ${scan.serious} | Kohtalaista: ${scan.moderate}`)
 
-  // 3. Find email
-  await job.updateProgress(60)
+  // 2. Find email
+  await job.updateProgress(50)
   const email = emailOverride ?? (sendEmail ? await findEmail(url) : null)
   console.log(`  Sähköposti: ${email ?? 'ei löydy'}`)
+
+  // 3. YTJ — yritystiedot
+  await job.updateProgress(60)
+  const hostname = new URL(scan.url).hostname
+  const ytj = await lookupYTJ(hostname)
+  if (ytj) {
+    console.log(`  YTJ: ${ytj.name} | Y-tunnus: ${ytj.businessId} | TOL ${ytj.tol}: ${ytj.tolName}`)
+  }
 
   // 4. Save to DB
   await job.updateProgress(70)
@@ -41,8 +56,23 @@ async function processJob(job: Job<ScanJobData>) {
 
   const domain = await db.domain.upsert({
     where: { url: normalized },
-    create: { url: normalized, isWordPress: isWP, email: email ?? undefined },
-    update: { isWordPress: isWP, email: email ?? undefined },
+    create: {
+      url: normalized,
+      isWordPress: filter.isWP,
+      email: email ?? undefined,
+      company: ytj?.name ?? undefined,
+      businessId: ytj?.businessId ?? undefined,
+      tol: ytj?.tol ?? undefined,
+      tolName: ytj?.tolName ?? undefined,
+    },
+    update: {
+      isWordPress: filter.isWP,
+      email: email ?? undefined,
+      company: ytj?.name ?? undefined,
+      businessId: ytj?.businessId ?? undefined,
+      tol: ytj?.tol ?? undefined,
+      tolName: ytj?.tolName ?? undefined,
+    },
   })
 
   const dbScan = await db.scan.create({

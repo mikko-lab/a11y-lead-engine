@@ -123,11 +123,22 @@ async function cmdLeads() {
   process.exit(0)
 }
 
+async function cmdMonitor() {
+  const sendEmail = args.includes('--email')
+  const { runMonitor } = await import('./monitor')
+  console.log('\nA11Y Lead Engine — Muutosseuranta')
+  console.log('─────────────────────────────────────\n')
+  await runMonitor({ sendEmail })
+  await db.$disconnect()
+  process.exit(0)
+}
+
 async function main() {
   switch (command) {
     case 'scan':     await cmdScan();    break
     case 'discover': await cmdDiscover(); break
     case 'leads':    await cmdLeads();   break
+    case 'monitor':  await cmdMonitor(); break
     default:
       console.log('A11Y Lead Engine')
       console.log('')

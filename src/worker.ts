@@ -64,6 +64,9 @@ async function processJob(job: Job<ScanJobData>) {
       businessId: ytj?.businessId ?? undefined,
       tol: ytj?.tol ?? undefined,
       tolName: ytj?.tolName ?? undefined,
+      hasCta: filter.hasCta,
+      hasAccessibilityStatement: filter.hasAccessibilityStatement,
+      siteLastModified: filter.siteLastModified ?? undefined,
     },
     update: {
       isWordPress: filter.isWP,
@@ -72,6 +75,9 @@ async function processJob(job: Job<ScanJobData>) {
       businessId: ytj?.businessId ?? undefined,
       tol: ytj?.tol ?? undefined,
       tolName: ytj?.tolName ?? undefined,
+      hasCta: filter.hasCta,
+      hasAccessibilityStatement: filter.hasAccessibilityStatement,
+      siteLastModified: filter.siteLastModified ?? undefined,
     },
   })
 

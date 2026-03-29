@@ -126,12 +126,25 @@ app.get('/api/stats', async (_, res) => {
   res.json({ total, sent, avg, withEmail })
 })
 
+function conversionScore(lead: any): number {
+  const d = lead.domain
+  const score = lead.scan.score
+  const sixMonthsAgo = new Date(Date.now() - 1000 * 60 * 60 * 24 * 180)
+  let pts = 0
+  if (d.isWordPress)                                              pts++
+  if (score >= 40 && score <= 70)                                 pts++
+  if (d.hasCta)                                                   pts++
+  if (!d.hasAccessibilityStatement)                               pts++
+  if (d.siteLastModified && new Date(d.siteLastModified) > sixMonthsAgo) pts++
+  return pts
+}
+
 app.get('/api/leads', async (_, res) => {
   const leads = await db.lead.findMany({
     include: { domain: true, scan: true },
     orderBy: { createdAt: 'desc' },
   })
-  res.json(leads)
+  res.json(leads.map(l => ({ ...l, conversionScore: conversionScore(l) })))
 })
 
 app.post('/api/leads/:id/send', async (req, res) => {
@@ -317,7 +330,11 @@ app.get('/', (_, res) => {
     <div class="stat"><div class="stat-value" id="s-avg">–</div><div class="stat-label">Keskipisteet</div></div>
   </div>
   <div class="toolbar">
-    <input id="search" placeholder="Hae domainilla..." oninput="render()">
+    <input id="search" placeholder="Hae domainilla tai yrityksellä..." oninput="render()">
+    <label class="toggle-wrap" style="font-size:13px;" onclick="toggleHotOnly()">
+      <div class="toggle" id="hot-toggle"></div>
+      Näytä vain parhaat (4–5 p.)
+    </label>
     <button class="btn btn-ghost btn-sm" onclick="load()">↻ Päivitä</button>
   </div>
   <div class="table-wrap">
@@ -328,6 +345,7 @@ app.get('/', (_, res) => {
           <th>Yritys</th>
           <th>TOL</th>
           <th>Pisteet</th>
+          <th>Konversio</th>
           <th>Ongelmat</th>
           <th>Sähköposti</th>
           <th>Tila</th>
@@ -471,6 +489,7 @@ let sendEmailOn = false
 let selectedTols = []
 let selectedYrCats = []
 let runEvtSource = null
+let hotOnly = false
 
 const TOL_OPTIONS = [${TOL_OPTIONS}]
 const YR_CATEGORIES = [${YR_CATEGORIES}]
@@ -496,9 +515,28 @@ async function load() {
   render()
 }
 
+function convDots(pts) {
+  const color = pts === 5 ? '#22c55e' : pts === 4 ? '#00D4AA' : '#334155'
+  const filled = '●'.repeat(pts)
+  const empty = '○'.repeat(5 - pts)
+  return \`<span style="color:\${color};font-size:15px;letter-spacing:1px">\${filled}\${empty}</span>\`
+}
+
+function toggleHotOnly() {
+  hotOnly = !hotOnly
+  document.getElementById('hot-toggle').classList.toggle('on', hotOnly)
+  render()
+}
+
 function render() {
   const q = document.getElementById('search').value.toLowerCase()
-  const filtered = leads.filter(l => l.domain.url.toLowerCase().includes(q) || (l.domain.company || '').toLowerCase().includes(q))
+  let filtered = leads.filter(l =>
+    l.domain.url.toLowerCase().includes(q) || (l.domain.company || '').toLowerCase().includes(q)
+  )
+  if (hotOnly) {
+    filtered = filtered.filter(l => l.conversionScore >= 4)
+    filtered.sort((a, b) => b.conversionScore - a.conversionScore)
+  }
   const tbody = document.getElementById('tbody')
   const empty = document.getElementById('empty')
   if (!filtered.length) { tbody.innerHTML = ''; empty.style.display = ''; return }
@@ -512,11 +550,13 @@ function render() {
       ? '<span class="badge badge-sent">✓ Lähetetty</span>'
       : l.email ? '<span class="badge badge-nosend">Ei lähetetty</span>'
       : '<span class="badge badge-noemail">Ei sähköpostia</span>'
-    return \`<tr>
+    const hotRow = l.conversionScore === 5 ? ' style="background:#0d1f10"' : ''
+    return \`<tr\${hotRow}>
       <td><span class="domain">\${domain}</span></td>
       <td style="font-size:13px;color:#94a3b8">\${l.domain.company || '–'}</td>
       <td style="font-size:12px;color:#64748b">\${l.domain.tol ? 'TOL ' + l.domain.tol : '–'}</td>
       <td><span class="score \${cls}">\${score}</span></td>
+      <td>\${convDots(l.conversionScore)}</td>
       <td style="color:#94a3b8;font-size:13px">
         \${l.scan.critical > 0 ? '<span style="color:#ef4444">⚠ ' + l.scan.critical + ' kriit.</span> ' : ''}
         \${l.scan.serious > 0 ? '<span style="color:#f59e0b">' + l.scan.serious + ' vak.</span>' : ''}

@@ -16,10 +16,13 @@ model Domain {
   businessId     String?
   tol            String?
   tolName        String?
-  htmlHash       String?
-  htmlLength     Int?
-  lastMonitored  DateTime?
-  changePercent  Float?
+  htmlHash                 String?
+  htmlLength               Int?
+  lastMonitored            DateTime?
+  changePercent            Float?
+  hasCta                   Boolean?
+  hasAccessibilityStatement Boolean?
+  siteLastModified         DateTime?
   createdAt      DateTime  @default(now())
   scans          Scan[]
   leads          Lead[]

@@ -1,60 +1,48 @@
-import { chromium } from 'playwright'
+const BRAVE_API_KEY = process.env.BRAVE_SEARCH_API_KEY ?? ''
 
 export async function searchWordPressSites(query: string, limit = 20): Promise<string[]> {
-  const browser = await chromium.launch({ headless: true, args: ['--no-sandbox'] })
   const results: string[] = []
 
   try {
-    const context = await browser.newContext({
-      userAgent:
-        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-      locale: 'fi-FI',
-    })
-    const page = await context.newPage()
-
-    // Bing on huomattavasti sallivampi kuin DuckDuckGo
-    const searchUrl = `https://www.bing.com/search?q=${encodeURIComponent(query)}&setlang=fi&cc=FI&count=50`
-    await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 20000 })
-    await page.waitForTimeout(1500)
-
-    const links = await page.evaluate(() => {
-      const found: string[] = []
-      // Bing hakutulosten linkit ovat h2 > a tai .b_algo a
-      document.querySelectorAll('h2 a[href^="http"], .b_algo a[href^="http"]').forEach((el) => {
-        const href = (el as HTMLAnchorElement).href
-        if (!href.includes('bing.com') && !href.includes('microsoft.com')) {
-          found.push(href)
-        }
-      })
-      return [...new Set(found)]
+    const url = `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(query)}&count=20&country=fi&search_lang=fi&result_filter=web`
+    const res = await fetch(url, {
+      headers: {
+        'Accept': 'application/json',
+        'X-Subscription-Token': BRAVE_API_KEY,
+      },
+      signal: AbortSignal.timeout(10000),
     })
 
-    for (const link of links) {
+    if (!res.ok) return results
+
+    const data = await res.json()
+    for (const result of (data.web?.results ?? [])) {
       if (results.length >= limit) break
       try {
-        const url = new URL(link)
-        const clean = `${url.protocol}//${url.hostname}`
-        if (!results.includes(clean)) results.push(clean)
-      } catch {
-        continue
-      }
+        const parsed = new URL(result.url)
+        const clean = `${parsed.protocol}//${parsed.hostname}`
+        if (!results.some(r => r.includes(parsed.hostname))) {
+          results.push(clean)
+        }
+      } catch {}
     }
-  } finally {
-    await browser.close()
-  }
+  } catch {}
 
   return results
 }
 
 export const WP_QUERIES = [
-  'wp-content site:.fi tilitoimisto',
-  'wp-content site:.fi markkinointitoimisto',
-  'wp-content site:.fi hammaslääkäri',
-  'wp-content site:.fi fysioterapia',
-  'wp-content site:.fi lakitoimisto',
-  'wp-content site:.fi rakennusyritys',
-  'wp-content site:.fi autokorjaamo',
-  'wp-content site:.fi parturi kampaamo',
-  'wp-content site:.fi kiinteistövälittäjä',
-  'wp-content site:.fi siivouspalvelu',
+  'tilitoimisto wordpress verkkosivut suomi',
+  'hammaslääkäri wordpress vastaanotto',
+  'fysioterapia wordpress ajanvaraus',
+  'lakitoimisto wordpress palvelut',
+  'rakennusyritys wordpress kotisivu',
+  'autokorjaamo wordpress varaa aika',
+  'parturi kampaamo wordpress',
+  'kiinteistövälitys wordpress',
+  'siivouspalvelu wordpress kotisivu',
+  'ravintola wordpress varaus',
+  'hieronta wordpress ajanvaraus',
+  'optikko wordpress silmälasit',
+  'markkinointitoimisto wordpress palvelut',
 ]

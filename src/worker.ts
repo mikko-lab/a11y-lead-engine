@@ -10,6 +10,7 @@ import { sendReport } from './mailer'
 import { db } from './db/client'
 import { preFilter } from './prefilter'
 import { lookupYTJ } from './ytj'
+import { lookupKauppalehti } from './kauppalehti'
 
 const REPORTS_DIR = path.join(process.cwd(), 'reports')
 if (!fs.existsSync(REPORTS_DIR)) fs.mkdirSync(REPORTS_DIR)
@@ -50,6 +51,13 @@ async function processJob(job: Job<ScanJobData>) {
     console.log(`  YTJ: ${ytj.name} | Y-tunnus: ${ytj.businessId} | TOL ${ytj.tol}: ${ytj.tolName}`)
   }
 
+  // 3b. Kauppalehti — liikevaihto ja henkilöstö
+  await job.updateProgress(65)
+  const kl = ytj?.businessId ? await lookupKauppalehti(ytj.businessId) : null
+  if (kl?.revenue) {
+    console.log(`  Kauppalehti: liikevaihto ${(kl.revenue / 1000).toFixed(0)} t€ | henkilöstö: ${kl.employees ?? '?'}`)
+  }
+
   // 4. Save to DB
   await job.updateProgress(70)
   const normalized = scan.url
@@ -67,6 +75,9 @@ async function processJob(job: Job<ScanJobData>) {
       hasCta: filter.hasCta,
       hasAccessibilityStatement: filter.hasAccessibilityStatement,
       siteLastModified: filter.siteLastModified ?? undefined,
+      revenue: kl?.revenue ?? undefined,
+      employees: kl?.employees ?? undefined,
+      foundedYear: kl?.founded ?? undefined,
     },
     update: {
       isWordPress: filter.isWP,
@@ -78,6 +89,9 @@ async function processJob(job: Job<ScanJobData>) {
       hasCta: filter.hasCta,
       hasAccessibilityStatement: filter.hasAccessibilityStatement,
       siteLastModified: filter.siteLastModified ?? undefined,
+      revenue: kl?.revenue ?? undefined,
+      employees: kl?.employees ?? undefined,
+      foundedYear: kl?.founded ?? undefined,
     },
   })
 

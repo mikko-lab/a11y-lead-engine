@@ -23,6 +23,9 @@ model Domain {
   hasCta                   Boolean?
   hasAccessibilityStatement Boolean?
   siteLastModified         DateTime?
+  revenue                  Int?
+  employees                Int?
+  foundedYear              Int?
   createdAt      DateTime  @default(now())
   scans          Scan[]
   leads          Lead[]

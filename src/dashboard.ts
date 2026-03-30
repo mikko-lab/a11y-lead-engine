@@ -136,6 +136,7 @@ function conversionScore(lead: any): number {
   if (d.hasCta)                                                   pts++
   if (!d.hasAccessibilityStatement)                               pts++
   if (d.siteLastModified && new Date(d.siteLastModified) > sixMonthsAgo) pts++
+  if (d.revenue && d.revenue >= 200_000 && d.revenue <= 5_000_000)      pts++
   return pts
 }
 
@@ -346,6 +347,7 @@ app.get('/', (_, res) => {
           <th>TOL</th>
           <th>Pisteet</th>
           <th>Konversio</th>
+          <th>Liikevaihto</th>
           <th>Ongelmat</th>
           <th>Sähköposti</th>
           <th>Tila</th>
@@ -557,6 +559,7 @@ function render() {
       <td style="font-size:12px;color:#64748b">\${l.domain.tol ? 'TOL ' + l.domain.tol : '–'}</td>
       <td><span class="score \${cls}">\${score}</span></td>
       <td>\${convDots(l.conversionScore)}</td>
+      <td style="font-size:12px;color:#94a3b8">\${l.domain.revenue ? (l.domain.revenue >= 1_000_000 ? (l.domain.revenue/1_000_000).toFixed(1) + ' M€' : Math.round(l.domain.revenue/1000) + ' t€') : '–'}</td>
       <td style="color:#94a3b8;font-size:13px">
         \${l.scan.critical > 0 ? '<span style="color:#ef4444">⚠ ' + l.scan.critical + ' kriit.</span> ' : ''}
         \${l.scan.serious > 0 ? '<span style="color:#f59e0b">' + l.scan.serious + ' vak.</span>' : ''}

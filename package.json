@@ -11,9 +11,11 @@
     "db:studio": "prisma studio",
     "dashboard": "tsx src/dashboard.ts",
     "monitor": "tsx src/cli.ts monitor",
-    "dev": "tsx src/worker.ts"
+    "dev": "tsx src/worker.ts",
+    "enrich:emails": "tsx src/enrich-emails.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.80.0",
     "@prisma/client": "^5.22.0",
     "@types/express": "^5.0.6",
     "@types/unzipper": "^0.10.11",
@@ -23,6 +25,7 @@
     "express": "^5.2.1",
     "ioredis": "^5.4.1",
     "jspdf": "^2.5.2",
+    "marked": "^17.0.5",
     "nodemailer": "^6.9.15",
     "playwright": "^1.48.0",
     "unzipper": "^0.12.3"

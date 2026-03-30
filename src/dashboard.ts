@@ -174,7 +174,9 @@ app.post('/api/leads/:id/send', async (req, res) => {
     ? fs.readFileSync(lead.pdfPath)
     : generatePdf(scan, SENDER_NAME, SENDER_URL)
 
-  await sendReport({ to: emailTo, scan, pdf, senderName: SENDER_NAME, senderUrl: SENDER_URL })
+  const reportUrl = `${SENDER_URL}/r/${lead.token}`
+  const optOutUrl = `${SENDER_URL}/opt-out/${lead.token}`
+  await sendReport({ to: emailTo, scan, reportUrl, optOutUrl, aiSummary: lead.aiSummary, senderName: SENDER_NAME, senderUrl: SENDER_URL })
   await db.lead.update({
     where: { id: lead.id },
     data: { emailSent: true, sentAt: new Date(), email: emailTo },
@@ -208,6 +210,135 @@ app.get('/api/leads/:id/pdf', async (req, res) => {
   res.setHeader('Content-Type', 'application/pdf')
   res.setHeader('Content-Disposition', `attachment; filename="${new URL(lead.domain.url).hostname}-raportti.pdf"`)
   res.send(pdf)
+})
+
+// ── Opt-out (ei autentikaatiota) ──────────────────────────────────────────────
+app.get('/opt-out/:token', async (req, res) => {
+  const lead = await db.lead.findUnique({
+    where: { token: req.params.token },
+    include: { domain: true },
+  })
+  if (!lead) return res.status(404).send('Linkkiä ei löydy.')
+
+  await db.domain.update({
+    where: { id: lead.domainId },
+    data: { optedOut: true, optedOutAt: new Date() },
+  })
+
+  res.send(`<!DOCTYPE html>
+<html lang="fi">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Peruutus vahvistettu</title>
+<style>body{font-family:'Segoe UI',Arial,sans-serif;background:#f8fafc;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;}
+.box{background:#fff;border-radius:12px;padding:40px 32px;max-width:480px;text-align:center;box-shadow:0 2px 16px rgba(0,0,0,.07);}
+h1{font-size:22px;margin:0 0 12px;}p{color:#475569;line-height:1.6;margin:0 0 8px;}</style>
+</head>
+<body><div class="box">
+  <p style="font-size:32px;margin:0 0 16px;">✅</p>
+  <h1>Peruutus vahvistettu</h1>
+  <p>Osoite <strong>${lead.domain.url}</strong> on poistettu postituslistaltamme.</p>
+  <p>Ette saa meiltä enää viestejä.</p>
+</div></body></html>`)
+})
+
+// ── Julkinen raporttisivu (ei autentikaatiota) ─────────────────────────────────
+app.get('/r/:token', async (req, res) => {
+  const lead = await db.lead.findUnique({
+    where: { token: req.params.token },
+    include: { domain: true, scan: true },
+  })
+  if (!lead) return res.status(404).send('Raporttia ei löydy.')
+
+  const scan = {
+    url: lead.domain.url,
+    score: lead.scan.score,
+    critical: lead.scan.critical,
+    serious: lead.scan.serious,
+    moderate: lead.scan.moderate,
+    minor: lead.scan.minor,
+    passed: lead.scan.passed,
+    violations: JSON.parse(lead.scan.violations) as Array<{id:string,impact:string|null,help:string,wcag:string,element:string|null}>,
+    timestamp: lead.scan.scannedAt.toISOString(),
+  }
+
+  const domain = new URL(scan.url).hostname
+  const scoreColor = scan.score >= 80 ? '#22c55e' : scan.score >= 50 ? '#f59e0b' : '#ef4444'
+  const issueCount = scan.critical + scan.serious
+
+  const violationRows = scan.violations.slice(0, 10).map(v => {
+    const impactColor = v.impact === 'critical' ? '#ef4444' : v.impact === 'serious' ? '#f97316' : v.impact === 'moderate' ? '#f59e0b' : '#94a3b8'
+    const impactLabel = v.impact === 'critical' ? 'Kriittinen' : v.impact === 'serious' ? 'Vakava' : v.impact === 'moderate' ? 'Kohtalainen' : 'Vähäinen'
+    return `
+    <div style="border:1px solid #1e293b;border-radius:8px;padding:16px;margin-bottom:12px;">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+        <span style="background:${impactColor};color:#fff;font-size:11px;font-weight:700;padding:2px 8px;border-radius:4px;">${impactLabel}</span>
+        <span style="color:#94a3b8;font-size:12px;">${v.wcag}</span>
+      </div>
+      <p style="margin:0 0 6px;font-weight:600;color:#e2e8f0;">${v.help}</p>
+      ${v.element ? `<code style="display:block;background:#0f172a;color:#7dd3fc;font-size:11px;padding:8px;border-radius:4px;overflow-x:auto;white-space:pre-wrap;word-break:break-all;">${v.element.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</code>` : ''}
+    </div>`
+  }).join('')
+
+  res.send(`<!DOCTYPE html>
+<html lang="fi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Saavutettavuusraportti — ${domain}</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; background: #0f172a; color: #e2e8f0; margin: 0; padding: 0; }
+  .container { max-width: 720px; margin: 0 auto; padding: 40px 24px 80px; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  a { color: #7dd3fc; }
+</style>
+</head>
+<body>
+<div class="container">
+  <p style="color:#94a3b8;font-size:13px;margin:0 0 32px;">Raportti generoitu ${new Date(scan.timestamp).toLocaleDateString('fi-FI')}</p>
+
+  <h1>Saavutettavuusraportti</h1>
+  <p style="color:#94a3b8;margin:4px 0 32px;"><a href="${scan.url}" target="_blank">${scan.url}</a></p>
+
+  <div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:40px;">
+    <div style="flex:1;min-width:140px;background:#1e293b;border-radius:12px;padding:20px;text-align:center;">
+      <div style="font-size:48px;font-weight:800;color:${scoreColor};">${scan.score}</div>
+      <div style="color:#94a3b8;font-size:13px;">/ 100 pistettä</div>
+    </div>
+    <div style="flex:1;min-width:140px;background:#1e293b;border-radius:12px;padding:20px;text-align:center;">
+      <div style="font-size:48px;font-weight:800;color:#ef4444;">${issueCount}</div>
+      <div style="color:#94a3b8;font-size:13px;">vakavaa ongelmaa</div>
+    </div>
+    <div style="flex:1;min-width:140px;background:#1e293b;border-radius:12px;padding:20px;text-align:center;">
+      <div style="font-size:48px;font-weight:800;color:#94a3b8;">${scan.violations.length}</div>
+      <div style="color:#94a3b8;font-size:13px;">ongelmaa yhteensä</div>
+    </div>
+  </div>
+
+  ${lead.aiSummary ? `
+  <div style="background:#1e1a2e;border:1px solid #6d28d9;border-radius:12px;padding:24px;margin-bottom:40px;">
+    <p style="margin:0 0 12px;font-size:13px;font-weight:700;color:#a78bfa;letter-spacing:1px;text-transform:uppercase;">Yhteenveto johdolle</p>
+    <div style="color:#e2e8f0;line-height:1.7;white-space:pre-line;">${lead.aiSummary}</div>
+  </div>` : ''}
+
+  <h2 style="font-size:16px;color:#94a3b8;margin:0 0 16px;">Löydetyt ongelmat</h2>
+  ${violationRows || '<p style="color:#64748b;">Ei löydettyjä ongelmia.</p>'}
+
+  <div style="background:#0d1f10;border:1px solid #166534;border-radius:12px;padding:28px;margin-top:40px;text-align:center;">
+    <p style="margin:0 0 8px;font-size:18px;font-weight:700;">Haluatko ongelmat korjatuksi?</p>
+    <p style="margin:0 0 20px;color:#94a3b8;">Suurin osa löydetyistä ongelmista korjataan nopeasti.</p>
+    <a href="https://wpsaavutettavuus.fi" style="display:inline-block;background:#22c55e;color:#0f172a;font-weight:700;font-size:15px;padding:13px 28px;border-radius:8px;text-decoration:none;">
+      Ota yhteyttä → wpsaavutettavuus.fi
+    </a>
+  </div>
+
+  <p style="text-align:center;color:#94a3b8;font-size:12px;margin-top:40px;">
+    Raportti on luotu automaattisesti axe-core / WCAG 2.2 AA -standardin mukaisesti.<br>
+    ${SENDER_NAME} · <a href="https://wpsaavutettavuus.fi" style="color:#94a3b8;">wpsaavutettavuus.fi</a>
+  </p>
+</div>
+</body>
+</html>`)
 })
 
 // ── Dashboard HTML ────────────────────────────────────────────────────────────
@@ -253,7 +384,8 @@ app.get('/', (_, res) => {
   tbody tr { border-bottom: 1px solid #141e2e; transition: background .1s; }
   tbody tr:hover { background: #1a2744; }
   td { padding: 12px 16px; font-size: 14px; vertical-align: middle; }
-  .domain { font-weight: 600; color: #e2e8f0; }
+  .domain { font-weight: 600; color: #e2e8f0; text-decoration: none; }
+  .domain:hover { text-decoration: underline; }
   .score { font-weight: 700; font-size: 18px; }
   .score.green { color: #22c55e; }
   .score.yellow { color: #f59e0b; }
@@ -345,7 +477,7 @@ app.get('/', (_, res) => {
           <th>Domain</th>
           <th>Yritys</th>
           <th>TOL</th>
-          <th>Pisteet</th>
+          <th onclick="sortScore()" style="cursor:pointer;user-select:none">Pisteet<span id="score-sort-icon"> ↕</span></th>
           <th>Konversio</th>
           <th>Liikevaihto</th>
           <th>Ongelmat</th>
@@ -492,6 +624,7 @@ let selectedTols = []
 let selectedYrCats = []
 let runEvtSource = null
 let hotOnly = false
+let scoreSort = null // null | 'desc' | 'asc'
 
 const TOL_OPTIONS = [${TOL_OPTIONS}]
 const YR_CATEGORIES = [${YR_CATEGORIES}]
@@ -530,6 +663,11 @@ function toggleHotOnly() {
   render()
 }
 
+function sortScore() {
+  scoreSort = scoreSort === 'desc' ? 'asc' : 'desc'
+  render()
+}
+
 function render() {
   const q = document.getElementById('search').value.toLowerCase()
   let filtered = leads.filter(l =>
@@ -539,6 +677,10 @@ function render() {
     filtered = filtered.filter(l => l.conversionScore >= 4)
     filtered.sort((a, b) => b.conversionScore - a.conversionScore)
   }
+  if (scoreSort === 'desc') filtered.sort((a, b) => b.scan.score - a.scan.score)
+  else if (scoreSort === 'asc') filtered.sort((a, b) => a.scan.score - b.scan.score)
+  const icon = document.getElementById('score-sort-icon')
+  if (icon) icon.textContent = scoreSort === 'desc' ? ' ↓' : scoreSort === 'asc' ? ' ↑' : ' ↕'
   const tbody = document.getElementById('tbody')
   const empty = document.getElementById('empty')
   if (!filtered.length) { tbody.innerHTML = ''; empty.style.display = ''; return }
@@ -554,7 +696,7 @@ function render() {
       : '<span class="badge badge-noemail">Ei sähköpostia</span>'
     const hotRow = l.conversionScore === 5 ? ' style="background:#0d1f10"' : ''
     return \`<tr\${hotRow}>
-      <td><span class="domain">\${domain}</span></td>
+      <td><a href="\${l.domain.url}" target="_blank" class="domain">\${domain}</a></td>
       <td style="font-size:13px;color:#94a3b8">\${l.domain.company || '–'}</td>
       <td style="font-size:12px;color:#64748b">\${l.domain.tol ? 'TOL ' + l.domain.tol : '–'}</td>
       <td><span class="score \${cls}">\${score}</span></td>

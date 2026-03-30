@@ -11,6 +11,7 @@ import { db } from './db/client'
 import { preFilter } from './prefilter'
 import { lookupYTJ } from './ytj'
 import { lookupKauppalehti } from './kauppalehti'
+import { generateAiSummary } from './ai-summary'
 
 const REPORTS_DIR = path.join(process.cwd(), 'reports')
 if (!fs.existsSync(REPORTS_DIR)) fs.mkdirSync(REPORTS_DIR)
@@ -108,14 +109,17 @@ async function processJob(job: Job<ScanJobData>) {
     },
   })
 
-  // 5. Generate PDF
+  // 5. AI-yhteenveto johdolle
+  await job.updateProgress(75)
+  const aiSummary = await generateAiSummary(scan.violations, scan.url)
+  if (aiSummary) console.log(`  AI-yhteenveto generoitu`)
+
+  // 5b. Generate PDF (tallennetaan sisäiseen käyttöön)
   await job.updateProgress(80)
-  console.log(`  Generoidaan PDF...`)
   const pdf = generatePdf(scan, SENDER_NAME, SENDER_URL)
   const pdfName = `${new URL(normalized).hostname}-${Date.now()}.pdf`
   const pdfPath = path.join(REPORTS_DIR, pdfName)
   fs.writeFileSync(pdfPath, pdf)
-  console.log(`  PDF tallennettu: reports/${pdfName}`)
 
   // 6. Save lead
   const lead = await db.lead.create({
@@ -124,14 +128,17 @@ async function processJob(job: Job<ScanJobData>) {
       scanId: dbScan.id,
       email: email ?? undefined,
       pdfPath,
+      aiSummary: aiSummary ?? undefined,
     },
   })
 
-  // 7. Send email
-  if (email) {
+  // 7. Send email (linkki raporttiin, ei PDF-liitettä)
+  if (email && !domain.optedOut) {
     await job.updateProgress(90)
-    console.log(`  Lähetetään sähköposti → ${email}`)
-    await sendReport({ to: email, scan, pdf, senderName: SENDER_NAME, senderUrl: SENDER_URL })
+    const reportUrl = `${SENDER_URL}/r/${lead.token}`
+    const optOutUrl = `${SENDER_URL}/opt-out/${lead.token}`
+    console.log(`  Lähetetään sähköposti → ${email} | raportti: ${reportUrl}`)
+    await sendReport({ to: email, scan, reportUrl, optOutUrl, aiSummary: lead.aiSummary, senderName: SENDER_NAME, senderUrl: SENDER_URL })
     await db.lead.update({
       where: { id: lead.id },
       data: { emailSent: true, sentAt: new Date() },

@@ -29,7 +29,11 @@ export async function findEmail(baseUrl: string): Promise<string | null> {
     if (email) return email
   }
 
-  // 3. Sivuston scrape varalla
+  // 3. WordPress REST API — paljastaa usein käyttäjien nimet
+  const wpEmail = await wpRestEmail(baseUrl, domain)
+  if (wpEmail) return wpEmail
+
+  // 4. Sivuston scrape varalla
   return scrapeSite(baseUrl)
 }
 
@@ -53,6 +57,28 @@ async function hunterLookup(domain: string): Promise<string | null> {
   }
 }
 
+// WordPress REST API: /wp-json/wp/v2/users paljastaa usein käyttäjänimet
+// Rakennetaan siitä sähköpostiehdokkaita etunimi.sukunimi@domain.fi
+async function wpRestEmail(baseUrl: string, domain: string): Promise<string | null> {
+  try {
+    const res = await fetch(`${baseUrl.replace(/\/$/, '')}/wp-json/wp/v2/users?per_page=5`, {
+      signal: AbortSignal.timeout(6000),
+      headers: { 'User-Agent': 'Mozilla/5.0' },
+    })
+    if (!res.ok) return null
+    const users: any[] = await res.json()
+    if (!Array.isArray(users) || users.length === 0) return null
+
+    // Palauta vain oikea sähköposti — ei arvauksia nimistä
+    for (const u of users) {
+      if (u.email && !u.email.includes('example') && !u.email.includes('wordpress')) {
+        return u.email
+      }
+    }
+  } catch {}
+  return null
+}
+
 async function scrapeSite(baseUrl: string): Promise<string | null> {
   const origin = baseUrl.replace(/\/$/, '')
   const browser = await chromium.launch({ headless: true, args: ['--no-sandbox'] })
@@ -61,6 +87,17 @@ async function scrapeSite(baseUrl: string): Promise<string | null> {
     const page = await browser.newPage()
 
     await page.goto(origin, { waitUntil: 'domcontentloaded', timeout: 15000 })
+
+    // Etsi footer-alueelta ensin (tiheä sähköpostipaikka)
+    const footerEmail = await page.evaluate(() => {
+      const footer = document.querySelector('footer, #footer, .footer, .site-footer')
+      if (!footer) return null
+      const mailto = footer.querySelector('a[href^="mailto:"]')
+      if (mailto) return mailto.getAttribute('href')?.replace('mailto:', '') ?? null
+      return null
+    })
+    if (footerEmail) return footerEmail
+
     const homeHtml = await page.content()
     const homeEmail = extractEmail(homeHtml)
     if (homeEmail) return homeEmail
@@ -85,15 +122,16 @@ async function scrapeSite(baseUrl: string): Promise<string | null> {
   }
 }
 
+const FAKE_EMAIL_RE = /noreply|no-reply|example|placeholder|esimerkki|test@test|foo@bar|lorem/i
+
 function extractEmail(html: string): string | null {
   const mailtoMatch = html.match(/mailto:([a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,})/)
-  if (mailtoMatch) return mailtoMatch[1]
+  if (mailtoMatch && !FAKE_EMAIL_RE.test(mailtoMatch[1])) return mailtoMatch[1]
 
   const matches = html.match(EMAIL_RE) ?? []
   const filtered = matches.filter(
     (e) =>
-      !e.includes('noreply') &&
-      !e.includes('example') &&
+      !FAKE_EMAIL_RE.test(e) &&
       !e.endsWith('.png') &&
       !e.endsWith('.jpg') &&
       !e.endsWith('.svg')

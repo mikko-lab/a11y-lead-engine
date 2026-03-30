@@ -1,4 +1,5 @@
 import nodemailer from 'nodemailer'
+import { marked } from 'marked'
 import { ScanResult } from './scanner'
 
 function createTransport() {
@@ -13,51 +14,36 @@ function createTransport() {
   })
 }
 
-const VIOLATION_FI: Record<string, string> = {
-  'link-name':         'Osa linkeistä on käyttäjälle epäselviä — erityisesti ruudunlukijalla',
-  'color-contrast':    'Tekstin kontrasti on liian heikko — vaikea lukea heikkonäköiselle',
-  'image-alt':         'Kuvista puuttuu tekstivaihtoehto — ruudunlukija ohittaa ne kokonaan',
-  'label':             'Lomakekentistä puuttuu otsikot — käyttäjä ei tiedä mitä kirjoittaa',
-  'button-name':       'Osa painikkeista on nimettömiä — ruudunlukija ei osaa kuvata niitä',
-  'heading-order':     'Otsikkohierarkia on sekava — vaikeuttaa sivun hahmottamista',
-  'html-has-lang':     'Sivun kieli puuttuu — ruudunlukija ei osaa valita oikeaa ääntämistä',
-  'aria-required-attr':'ARIA-määritteitä käytetään väärin — apuvälineet tulkitsevat sivun virheellisesti',
-  'region':            'Sivun rakenne on jäsentymätön — navigointi apuvälineillä on vaikeaa',
-  'duplicate-id':      'Sivulla on toistuvia tunnisteita — voi aiheuttaa arvaamattomia virheitä',
-  'frame-title':       'Upotetut kehykset ovat nimettömiä — sisältö jää piiloon ruudunlukijalta',
-  'list':              'Listat on toteutettu väärin — rakenne ei välity apuvälineille',
-  'listitem':          'Listaelementtejä käytetään väärässä yhteydessä — rakenne hajoaa',
-  'td-headers-attr':   'Taulukon solut eivät yhdisty otsikoihin — taulukko on epäselvä',
-  'th-has-data-cells': 'Taulukon otsikkosoluilla ei ole vastaavia tietoja — rakenne on virheellinen',
-}
 
 export async function sendReport(opts: {
   to: string
   scan: ScanResult
-  pdf: Buffer
+  reportUrl: string
+  optOutUrl: string
+  aiSummary?: string | null
   senderName: string
   senderUrl: string
 }): Promise<void> {
-  const { to, scan, pdf, senderName, senderUrl } = opts
+  const { to, scan, reportUrl, optOutUrl, aiSummary, senderName, senderUrl } = opts
   const transporter = createTransport()
   const domain = new URL(scan.url).hostname
   const score = scan.score
+  const issueCount = scan.critical + scan.serious
+  const subjectIssueLabel = issueCount === 1 ? '1 korjattava kohta' : `${issueCount} korjattavaa kohtaa`
 
-  const topViolation =
-    scan.violations.find(v => v.impact === 'critical') ||
-    scan.violations.find(v => v.impact === 'serious') ||
-    scan.violations[0]
+  // Positiivinen tai neutraali arvio pisteiden mukaan
+  const scoreComment = score >= 85
+    ? `Sivustonne on teknisesti <strong>erinomaisella tasolla</strong> — tulos ${score}/100 on selvästi keskiarvon yläpuolella.`
+    : score >= 70
+    ? `Sivustonne sai saavutettavuusskannuksessa tuloksen <strong>${score}/100</strong>, mikä on hyvä lähtökohta.`
+    : `Ajoin sivustollenne saavutettavuusskannauksen (WCAG 2.2 AA) ja tulos oli <strong>${score}/100</strong>.`
 
-  const topFinding = topViolation
-    ? (VIOLATION_FI[topViolation.id] ?? topViolation.help)
+  // Markdown → HTML (AI-yhteenveto)
+  const aiHtml = aiSummary
+    ? marked.parse(aiSummary, { async: false }) as string
     : null
 
-  const issueCount = scan.critical + scan.serious
-  const issueLabel = issueCount === 1 ? '1 vakava ongelma' : `${issueCount} vakavaa ongelmaa`
-  const subjectIssueLabel = issueCount === 1 ? '1 vakava' : `${issueCount} vakavaa`
-
-  const html = `
-<!DOCTYPE html>
+  const html = `<!DOCTYPE html>
 <html lang="fi">
 <head>
 <meta charset="UTF-8">
@@ -73,52 +59,39 @@ export async function sendReport(opts: {
 </head>
 <body style="font-family: 'Segoe UI', Arial, sans-serif; font-size: 16px; color: #1a1a1a; max-width: 600px; margin: 0 auto; padding: 32px 24px; background-color: #ffffff;">
 
+  <!-- Preheader: näkyy sähköpostiohjelman esikatselussa mutta ei itse viestissä -->
+  <div style="display:none;max-height:0;overflow:hidden;mso-hide:all;">Ajoimme sivustollenne kevyen saavutettavuusskannauksen ja tulos oli ${score >= 85 ? 'loistava' : 'hyvä'} ${score}/100. Tässä yksi huomio...&nbsp;‌&nbsp;‌&nbsp;‌&nbsp;‌&nbsp;‌&nbsp;‌&nbsp;‌&nbsp;‌&nbsp;‌&nbsp;‌&nbsp;‌&nbsp;‌&nbsp;‌&nbsp;‌</div>
+
   <p style="margin: 0 0 20px; line-height: 1.6;">Hei,</p>
 
-  <p style="margin: 0 0 20px; line-height: 1.6;">skannasin sivustonne <strong>${scan.url}</strong> saavutettavuuden (WCAG 2.2 AA).</p>
+  <p style="margin: 0 0 20px; line-height: 1.6;">${scoreComment}</p>
 
-  <p style="margin: 0 0 8px; line-height: 1.6;">👉 Tulos: <strong>${score} / 100</strong></p>
-  <p style="margin: 0 0 24px; line-height: 1.6; font-size: 18px; font-weight: 700;">⚠️ ${issueLabel}</p>
+  ${issueCount > 0 ? `<p style="margin: 0 0 24px; line-height: 1.6;">Vaikka perusasiat ovat kunnossa, sivustolle on jäänyt <strong>${subjectIssueLabel}</strong>, ${issueCount === 1 ? 'joka' : 'jotka'} on kuitenkin helppo korjata:</p>` : ''}
 
-  <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 24px 0;">
+  ${aiHtml ? `
+  <div style="background: #f8fafc; border-left: 3px solid #0A2540; padding: 16px 20px; margin: 0 0 28px; border-radius: 0 6px 6px 0; line-height: 1.7; color: #1a1a1a;">
+    ${aiHtml}
+  </div>` : ''}
 
-  ${topFinding ? `
-  <p style="margin: 0 0 12px; font-weight: 700; line-height: 1.6;">⚠️ Merkittävin havainto</p>
+  <p style="margin: 0 0 16px; line-height: 1.6;">Koostin löydöksistä teille lyhyen ja ilmaisen raportin. Näette tarkan ongelmakohdan suoraan tästä linkistä:</p>
 
-  <p style="margin: 0 0 16px; line-height: 1.6;">${topFinding}.</p>
-
-  <p style="margin: 0 0 8px; line-height: 1.6;">Tämä tarkoittaa käytännössä sitä, että:</p>
-  <p style="margin: 0 0 4px; line-height: 1.6;">– ruudunlukijaa käyttävä ei saa täyttä hyötyä sivustosta</p>
-  <p style="margin: 0 0 4px; line-height: 1.6;">– saavutettavuus ei täytä WCAG-vaatimuksia</p>
-  <p style="margin: 0 0 24px; line-height: 1.6;">– voi vaikuttaa myös käytettävyyteen ja konversioon</p>
-
-  <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 24px 0;">
-  ` : ''}
-
-  <p style="margin: 0 0 20px; line-height: 1.6;">Suurin osa ongelmista on nopeasti korjattavissa — mutta usein ne jäävät tekemättä.</p>
-
-  <p style="margin: 0 0 8px; line-height: 1.6;">Raportissa näkyy myös tarkka kohta sivulla, jossa ongelma esiintyy — löydätte sen liitteenä.</p>
-
-  <p style="margin: 0 0 20px; line-height: 1.6;">Jos haluatte korjaukset tehtyä, auditointi onnistuu nopeasti:</p>
-
-  <a href="${senderUrl}#hinnoittelu" style="display: inline-block; background: #0A2540; color: #ffffff; font-weight: 600; font-size: 15px; padding: 13px 26px; border-radius: 6px; text-decoration: none;">
-    Tilaa saavutettavuusauditointi
+  <a href="${reportUrl}" style="display: inline-block; background: #0A2540; color: #ffffff; font-weight: 600; font-size: 15px; padding: 14px 28px; border-radius: 6px; text-decoration: none; margin-bottom: 28px;">
+    👉 Katso sivustonne saavutettavuusraportti
   </a>
 
-  <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 32px 0 24px;">
+  <p style="margin: 0 0 16px; line-height: 1.6;">Suurin osa vastaavista ongelmista on korjattavissa muutamassa tunnissa. Useimmat auditoinnit jäävät raporttitasolle — minä voin halutessanne auttaa viemään korjaukset suoraan tuotantoon asti.</p>
 
-  <p style="margin: 0 0 8px; line-height: 1.6;">Jos haluatte, voin myös:</p>
-  <p style="margin: 0 0 4px; line-height: 1.6;">– korjata nämä suoraan sivustollenne</p>
-  <p style="margin: 0 0 20px; line-height: 1.6;">– varmistaa WCAG 2.2 -vaatimusten täyttymisen käytännössä</p>
+  <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 28px 0;">
 
-  <p style="margin: 0 0 32px; line-height: 1.6;">Useimmat auditoinnit jäävät raporttitasolle — minä vien korjaukset tuotantoon.</p>
-
-  <p style="margin: 0 0 32px; line-height: 1.6; color: #475569;">Jos tämä jää korjaamatta, sama ongelma todennäköisesti toistuu myös muilla sivuilla.</p>
-
-  <p style="margin: 0; color: #475569; font-size: 14px; line-height: 1.8;">
+  <p style="margin: 0 0 24px; color: #475569; font-size: 14px; line-height: 1.8;">
     Ystävällisin terveisin,<br>
     <strong style="color: #1a1a1a;">${senderName}</strong><br>
-    <a href="${senderUrl}" style="color: #475569;">${senderUrl.replace('https://', '')}</a>
+    <a href="https://wpsaavutettavuus.fi" style="color: #475569;">wpsaavutettavuus.fi</a>
+  </p>
+
+  <p style="margin: 0; color: #475569; font-size: 12px; line-height: 1.7; border-top: 1px solid #e2e8f0; padding-top: 16px;">
+    Sait tämän viestin, koska yrityksenne verkkosivusto löytyi julkisesta hakemistosta.<br>
+    Jos et halua vastaavia viestejä jatkossa, <a href="${optOutUrl}" style="color: #1a1a1a;">peru tilaus tästä</a>.
   </p>
 
 </body>
@@ -127,14 +100,7 @@ export async function sendReport(opts: {
   await transporter.sendMail({
     from: process.env.SMTP_FROM,
     to,
-    subject: `Löysimme saavutettavuusongelman sivustoltanne (${subjectIssueLabel})`,
+    subject: `Pieni kehitysehdotus sivustonne (${domain}) saavutettavuuteen`,
     html,
-    attachments: [
-      {
-        filename: `saavutettavuusraportti-${domain}-${new Date().toISOString().split('T')[0]}.pdf`,
-        content: pdf,
-        contentType: 'application/pdf',
-      },
-    ],
   })
 }

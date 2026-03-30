@@ -36,8 +36,8 @@ export async function scanUrl(url: string): Promise<ScanResult> {
     const page = await browser.newPage()
     await page.setExtraHTTPHeaders({ 'Accept-Language': 'fi-FI,fi;q=0.9' })
 
-    await page.goto(normalized, { waitUntil: 'networkidle', timeout: 30000 })
-    await page.waitForTimeout(2000)
+    await page.goto(normalized, { waitUntil: 'domcontentloaded', timeout: 20000 })
+    await page.waitForTimeout(1500)
 
     await page.addScriptTag({ path: AXE_PATH })
 

@@ -12,6 +12,24 @@ const CITY_DOMAINS = new Set([
   'järvenpää.fi','rauma.fi','kajaani.fi','kerava.fi','savonlinna.fi',
 ])
 
+// Tunnetut suuret suomalaiset domainit jotka eivät ole pk-yrityksiä
+const LARGE_DOMAIN_BLOCKLIST = new Set([
+  'yle.fi','hs.fi','is.fi','il.fi','mtv.fi','iltasanomat.fi','iltalehti.fi',
+  'kauppalehti.fi','talouselama.fi','tekniikkatalous.fi','tivi.fi',
+  'oikotie.fi','tori.fi','huutokauppa.fi','nettiauto.fi','nettimoto.fi',
+  'etuovi.com','vuokraovi.com',
+  'veikkaus.fi','finlandia.fi',
+  's-kanava.fi','k-ruoka.fi','prisma.fi','citymarket.fi','k-market.fi',
+  'alko.fi','posti.fi','finnair.fi','vr.fi','matkahuolto.fi',
+  'nordea.fi','op.fi','spankki.fi','handelsbanken.fi','danske.fi',
+  'if.fi','pohjola.fi','lahitapiola.fi','fennia.fi',
+  'elisa.fi','dna.fi','telia.fi','moi.fi',
+  'google.com','google.fi','facebook.com','instagram.com','linkedin.com',
+  'microsoft.com','apple.com','amazon.com','youtube.com',
+  'foreca.fi','weather.fi',
+  'fonecta.fi','finder.fi','yritystele.fi',
+])
+
 const KUNTA_RE = /\b(kunta|kaupunki|seurakunta|virasto|ministeri|valtion|valtio|poliisi)\b/i
 
 // Enterprise-signaalit HTML-otsikosta / meta-descriptionista
@@ -19,6 +37,9 @@ const ENTERPRISE_TITLE_RE = /\boyj\b|\bkonserni\b|\bgroup\b|\bholding\b|\bintern
 
 function isGovOrEnterprise(hostname: string, html: string): string | null {
   const host = hostname.replace(/^www\./, '')
+
+  // Tunnetut suuret domainit
+  if (LARGE_DOMAIN_BLOCKLIST.has(host)) return 'suuri yritys/media'
 
   // Kaupunkidomain
   if (CITY_DOMAINS.has(host)) return 'kaupunki/kuntadomain'

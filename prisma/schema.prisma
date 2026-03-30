@@ -26,6 +26,8 @@ model Domain {
   revenue                  Int?
   employees                Int?
   foundedYear              Int?
+  optedOut                 Boolean  @default(false)
+  optedOutAt               DateTime?
   createdAt      DateTime  @default(now())
   scans          Scan[]
   leads          Lead[]
@@ -57,5 +59,7 @@ model Lead {
   emailSent   Boolean  @default(false)
   sentAt      DateTime?
   pdfPath     String?
+  token       String   @unique @default(cuid())
+  aiSummary   String?
   createdAt   DateTime @default(now())
 }

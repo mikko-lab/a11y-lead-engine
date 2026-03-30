@@ -11,6 +11,7 @@ export interface ScanJobData {
   url: string
   sendEmail: boolean
   emailOverride?: string // if set, send to this instead of discovered email
+  source?: string        // e.g. "DuckDuckGo", "yritykset.fi / Ravintolat"
 }
 
 export async function addScanJob(data: ScanJobData) {

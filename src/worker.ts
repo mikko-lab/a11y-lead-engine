@@ -20,7 +20,7 @@ const SENDER_NAME = process.env.SENDER_NAME ?? 'WP Saavutettavuus'
 const SENDER_URL  = process.env.SENDER_URL  ?? 'https://wpsaavutettavuus.fi'
 
 async function processJob(job: Job<ScanJobData>) {
-  const { url, sendEmail, emailOverride } = job.data
+  const { url, sendEmail, emailOverride, source } = job.data
   console.log(`\n[${new Date().toLocaleTimeString('fi-FI')}] Aloitetaan: ${url}`)
 
   // 0. Pre-filter — nopea tarkistus ennen raskasta skannausta
@@ -129,6 +129,7 @@ async function processJob(job: Job<ScanJobData>) {
       email: email ?? undefined,
       pdfPath,
       aiSummary: aiSummary ?? undefined,
+      source: source ?? undefined,
     },
   })
 

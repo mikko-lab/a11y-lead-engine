@@ -17,11 +17,12 @@ export interface DiscoveryOpts {
   limit?: number
   sendEmail?: boolean
   tolFilter?: string[]
+  source?: string
   onProgress?: (msg: string) => void
 }
 
 export async function discoverFromDuckDuckGo(opts: DiscoveryOpts): Promise<DiscoveryResult> {
-  const { limit = 50, sendEmail = false, onProgress = console.log } = opts
+  const { limit = 50, sendEmail = false, onProgress = console.log, source = 'DuckDuckGo' } = opts
   const perQuery = Math.ceil(limit / WP_QUERIES.length)
   const allUrls = new Set<string>()
 
@@ -33,15 +34,15 @@ export async function discoverFromDuckDuckGo(opts: DiscoveryOpts): Promise<Disco
     await sleep(2000) // kohteliaisuusviive
   }
 
-  return queueWordPressSites([...allUrls], { sendEmail, tolFilter: opts.tolFilter, onProgress })
+  return queueWordPressSites([...allUrls], { sendEmail, tolFilter: opts.tolFilter, source, onProgress })
 }
 
 export async function discoverFromTranco(opts: DiscoveryOpts): Promise<DiscoveryResult> {
-  const { limit = 200, sendEmail = false, onProgress = console.log } = opts
+  const { limit = 200, sendEmail = false, onProgress = console.log, source = 'Tranco .fi' } = opts
   onProgress(`  Haetaan top-${limit} .fi-domainia Tranco-listasta...`)
   const urls = await getFiDomains(limit)
   onProgress(`  Löydettiin ${urls.length} .fi-domainia`)
-  return queueWordPressSites(urls, { sendEmail, tolFilter: opts.tolFilter, onProgress })
+  return queueWordPressSites(urls, { sendEmail, tolFilter: opts.tolFilter, source, onProgress })
 }
 
 export async function discoverFromYritykset(opts: DiscoveryOpts & {
@@ -64,14 +65,15 @@ export async function discoverFromYritykset(opts: DiscoveryOpts & {
     await sleep(1500)
   }
 
-  return queueWordPressSites([...allUrls], { sendEmail, tolFilter: opts.tolFilter, onProgress })
+  const source = `yritykset.fi / ${categories.join(', ')}`
+  return queueWordPressSites([...allUrls], { sendEmail, tolFilter: opts.tolFilter, source, onProgress })
 }
 
 async function queueWordPressSites(
   urls: string[],
-  opts: { sendEmail: boolean; tolFilter?: string[]; onProgress: (msg: string) => void }
+  opts: { sendEmail: boolean; tolFilter?: string[]; source?: string; onProgress: (msg: string) => void }
 ): Promise<DiscoveryResult> {
-  const { sendEmail, tolFilter, onProgress } = opts
+  const { sendEmail, tolFilter, source, onProgress } = opts
   let wordpress = 0
   let queued = 0
 
@@ -97,7 +99,7 @@ async function queueWordPressSites(
       }
 
       if (filter.isWP) wordpress++
-      await addScanJob({ url, sendEmail })
+      await addScanJob({ url, sendEmail, source })
       queued++
       onProgress(`  ✓ Jonoon: ${url}`)
     } catch {

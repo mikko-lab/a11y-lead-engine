@@ -474,6 +474,7 @@ app.get('/', (_, res) => {
     <table>
       <thead>
         <tr>
+          <th>#</th>
           <th>Domain</th>
           <th>Yritys</th>
           <th>TOL</th>
@@ -483,6 +484,7 @@ app.get('/', (_, res) => {
           <th>Ongelmat</th>
           <th>Sähköposti</th>
           <th>Tila</th>
+          <th>Lähde</th>
           <th>Skannattu</th>
           <th>Toiminnot</th>
         </tr>
@@ -696,6 +698,7 @@ function render() {
       : '<span class="badge badge-noemail">Ei sähköpostia</span>'
     const hotRow = l.conversionScore === 5 ? ' style="background:#0d1f10"' : ''
     return \`<tr\${hotRow}>
+      <td style="font-size:12px;color:#64748b;font-weight:600">#\${l.leadNo}</td>
       <td><a href="\${l.domain.url}" target="_blank" class="domain">\${domain}</a></td>
       <td style="font-size:13px;color:#94a3b8">\${l.domain.company || '–'}</td>
       <td style="font-size:12px;color:#64748b">\${l.domain.tol ? 'TOL ' + l.domain.tol : '–'}</td>
@@ -709,6 +712,7 @@ function render() {
       </td>
       <td style="font-size:13px;color:#94a3b8">\${l.email || '–'}</td>
       <td>\${emailBadge}</td>
+      <td style="font-size:11px;color:#64748b;max-width:120px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="\${l.source || ''}">\${l.source || '–'}</td>
       <td style="font-size:12px;color:#64748b">\${date}</td>
       <td><div class="actions">
         <a href="/api/leads/\${l.id}/pdf" target="_blank"><button class="btn btn-ghost btn-sm">PDF</button></a>

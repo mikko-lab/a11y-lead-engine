@@ -51,6 +51,7 @@ model Scan {
 
 model Lead {
   id          String   @id @default(cuid())
+  leadNo      Int      @default(autoincrement())
   domainId    String
   domain      Domain   @relation(fields: [domainId], references: [id])
   scanId      String   @unique
@@ -61,5 +62,6 @@ model Lead {
   pdfPath     String?
   token       String   @unique @default(cuid())
   aiSummary   String?
+  source      String?
   createdAt   DateTime @default(now())
 }

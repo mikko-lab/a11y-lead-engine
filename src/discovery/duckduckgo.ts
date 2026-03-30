@@ -4,7 +4,7 @@ export async function searchWordPressSites(query: string, limit = 20): Promise<s
   const results: string[] = []
 
   try {
-    const url = `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(query)}&count=20&country=fi&search_lang=fi&result_filter=web`
+    const url = `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(query)}&count=20&country=fi&search_lang=fi`
     const res = await fetch(url, {
       headers: {
         'Accept': 'application/json',
@@ -32,17 +32,17 @@ export async function searchWordPressSites(query: string, limit = 20): Promise<s
 }
 
 export const WP_QUERIES = [
-  'tilitoimisto wordpress verkkosivut suomi',
-  'hammaslääkäri wordpress vastaanotto',
-  'fysioterapia wordpress ajanvaraus',
-  'lakitoimisto wordpress palvelut',
-  'rakennusyritys wordpress kotisivu',
-  'autokorjaamo wordpress varaa aika',
-  'parturi kampaamo wordpress',
-  'kiinteistövälitys wordpress',
-  'siivouspalvelu wordpress kotisivu',
-  'ravintola wordpress varaus',
-  'hieronta wordpress ajanvaraus',
-  'optikko wordpress silmälasit',
-  'markkinointitoimisto wordpress palvelut',
+  'tilitoimisto palvelut suomi',
+  'hammaslääkäri vastaanotto ajanvaraus',
+  'fysioterapia kuntoutus suomi',
+  'lakitoimisto asianajaja suomi',
+  'rakennusyritys remontti suomi',
+  'autokorjaamo huolto suomi',
+  'parturi kampaamo hiustenleikkaus',
+  'kiinteistövälitys asunnot suomi',
+  'siivouspalvelu kotisiivous suomi',
+  'ravintola lounas suomi',
+  'hieronta hyvinvointi suomi',
+  'optikko silmälasit suomi',
+  'markkinointitoimisto mainos suomi',
 ]

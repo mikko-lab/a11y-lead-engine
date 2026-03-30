@@ -95,7 +95,7 @@ export function generatePdf(scan: ScanResult, senderName: string, senderUrl: str
   doc.setFont('helvetica', 'bold')
   doc.setFontSize(22)
   doc.setTextColor(...C.ink)
-  doc.text('Saavutettavuusraportti', margin, y)
+  doc.text('Sivustoanalyysi', margin, y)
   y += 7
 
   doc.setFont('helvetica', 'normal')
@@ -103,7 +103,7 @@ export function generatePdf(scan: ScanResult, senderName: string, senderUrl: str
   doc.setTextColor(...C.inkMute)
   doc.text('WCAG 2.2 AA', margin, y)
   doc.setTextColor(...C.inkMid)
-  doc.text(`Skannattu ${scannedAt}`, pageW - margin, y, { align: 'right' })
+  doc.text(`Tarkistettu ${scannedAt}`, pageW - margin, y, { align: 'right' })
   y += 5
 
   doc.setFontSize(9)
@@ -179,7 +179,7 @@ export function generatePdf(scan: ScanResult, senderName: string, senderUrl: str
   y += 7
 
   // ── Disclaimer ────────────────────────────────────────────────────────────
-  const disc = 'Huom: Tämä tarkistus on automaattinen ja tunnistaa arviolta noin 20 % WCAG 2.2 AA -ongelmista. Täydellinen saavutettavuusarviointi edellyttää manuaalista testausta. Raportti ei ole virallinen vaatimustenmukaisuuslausunto.'
+  const disc = 'Huom: Tämä tarkistus on automaattinen ja tunnistaa arviolta noin 20 % WCAG 2.2 AA -ongelmista. Täydellinen analyysi edellyttää manuaalista testausta. Yhteenveto ei ole virallinen vaatimustenmukaisuuslausunto.'
   const discLines = doc.splitTextToSize(disc, cW - 8)
   const discH = discLines.length * 4.5 + 6
   doc.setFillColor(248, 250, 252)
@@ -292,7 +292,7 @@ export function generatePdf(scan: ScanResult, senderName: string, senderUrl: str
   doc.setFont('helvetica', 'normal')
   doc.setFontSize(9)
   doc.setTextColor(0, 212, 170)
-  doc.text('Tilaa saavutettavuusauditointi', margin + cW / 2, y + 18, { align: 'center' })
+  doc.text('Tilaa sivustoanalyysi', margin + cW / 2, y + 18, { align: 'center' })
 
   doc.setFont('helvetica', 'normal')
   doc.setFontSize(8.5)

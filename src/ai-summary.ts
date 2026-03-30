@@ -1,7 +1,11 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { Violation } from './scanner'
 
-export async function generateAiSummary(violations: Violation[], url: string): Promise<string | null> {
+export async function generateAiSummary(
+  violations: Violation[],
+  url: string,
+  siteContext?: string
+): Promise<string | null> {
   if (!process.env.ANTHROPIC_API_KEY) return null
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
   if (violations.length === 0) return null
@@ -9,22 +13,31 @@ export async function generateAiSummary(violations: Violation[], url: string): P
   const top = violations
     .filter(v => v.impact === 'critical' || v.impact === 'serious')
     .slice(0, 6)
-    .map(v => `- [${v.impact}] ${v.help} (${v.wcag})`)
+    .map(v => {
+      const contrastNote = v.contrastRatio && v.expectedContrastRatio
+        ? ` — kontrasti ${v.contrastRatio.toFixed(1)}:1 (vaaditaan ${v.expectedContrastRatio})`
+        : ''
+      return `- [${v.impact}] ${v.help}${contrastNote} (${v.wcag})`
+    })
     .join('\n')
 
   if (!top) return null
 
+  const contextLine = siteContext
+    ? `Sivuston tyyppi: ${siteContext}.`
+    : ''
+
   try {
     const msg = await client.messages.create({
       model: 'claude-haiku-4-5-20251001',
-      max_tokens: 400,
+      max_tokens: 450,
       messages: [{
         role: 'user',
-        content: `Olet saavutettavuusasiantuntija. Alla on lista teknisistä saavutettavuusvirheistä sivustolta ${url}.
+        content: `Olet saavutettavuusasiantuntija. Alla on lista teknisistä havainnoista sivustolta ${url}. ${contextLine}
 
 ${top}
 
-Kirjoita lyhyt yhteenveto (max 3 kohtaa) yritysjohtajalle, joka ei tunne teknistä termistöä. Kerro konkreettisesti, miten kukin ongelma haittaa oikeaa asiakasta tai liiketoimintaa.
+Kirjoita lyhyt yhteenveto (max 3 kohtaa) yritysjohtajalle, joka ei tunne teknistä termistöä. Kerro konkreettisesti, miten kukin ongelma haittaa oikeaa asiakasta tai liiketoimintaa. ${siteContext ? `Mainitse tarvittaessa miten ongelma liittyy tämän tyyppiseen liiketoimintaan (${siteContext}).` : ''}
 
 Säännöt:
 - Kirjoita selkeää suomea. Älä käytä englannista johdettuja sanoja kuten "rankata" — käytä "sijoittua hakutuloksissa".

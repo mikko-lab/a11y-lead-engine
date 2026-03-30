@@ -8,60 +8,80 @@ datasource db {
 }
 
 model Domain {
-  id             String    @id @default(cuid())
-  url            String    @unique
-  isWordPress    Boolean   @default(false)
-  email          String?
-  company        String?
-  businessId     String?
-  tol            String?
-  tolName        String?
-  htmlHash                 String?
-  htmlLength               Int?
-  lastMonitored            DateTime?
-  changePercent            Float?
-  hasCta                   Boolean?
+  id                        String    @id @default(cuid())
+  url                       String    @unique
+  isWordPress               Boolean   @default(false)
+  email                     String?
+  company                   String?
+  businessId                String?
+  tol                       String?
+  tolName                   String?
+  htmlHash                  String?
+  htmlLength                Int?
+  lastMonitored             DateTime?
+  changePercent             Float?
+  hasCta                    Boolean?
   hasAccessibilityStatement Boolean?
-  siteLastModified         DateTime?
-  revenue                  Int?
-  employees                Int?
-  foundedYear              Int?
-  optedOut                 Boolean  @default(false)
-  optedOutAt               DateTime?
-  createdAt      DateTime  @default(now())
-  scans          Scan[]
-  leads          Lead[]
+  siteLastModified          DateTime?
+  revenue                   Int?
+  employees                 Int?
+  foundedYear               Int?
+  optedOut                  Boolean   @default(false)
+  optedOutAt                DateTime?
+  createdAt                 DateTime  @default(now())
+  scans                     Scan[]
+  leads                     Lead[]
 }
 
 model Scan {
-  id         String   @id @default(cuid())
-  domainId   String
-  domain     Domain   @relation(fields: [domainId], references: [id])
-  score      Int
-  critical   Int
-  serious    Int
-  moderate   Int
-  minor      Int
-  passed     Int
-  violations String
-  status     String   @default("completed")
-  scannedAt  DateTime @default(now())
-  lead       Lead?
+  id            String      @id @default(cuid())
+  domainId      String
+  domain        Domain      @relation(fields: [domainId], references: [id])
+  score         Int
+  critical      Int
+  serious       Int
+  moderate      Int
+  minor         Int
+  passed        Int
+  violations    String      // JSON — legacy field, kept for backward compat
+  pagesScanned  Int         @default(1)
+  pageBreakdown String?     // JSON: [{url, score, critical, serious, moderate, minor}]
+  status        String      @default("completed")
+  scannedAt     DateTime    @default(now())
+  lead          Lead?
+  violationRows Violation[]
+}
+
+model Violation {
+  id          String  @id @default(cuid())
+  scanId      String
+  scan        Scan    @relation(fields: [scanId], references: [id])
+  ruleId      String
+  impact      String?
+  description String
+  help        String
+  wcag        String
+  element     String?
+  pageUrl     String?
 }
 
 model Lead {
-  id          String   @id @default(cuid())
-  leadNo      Int      @default(autoincrement())
-  domainId    String
-  domain      Domain   @relation(fields: [domainId], references: [id])
-  scanId      String   @unique
-  scan        Scan     @relation(fields: [scanId], references: [id])
-  email       String?
-  emailSent   Boolean  @default(false)
-  sentAt      DateTime?
-  pdfPath     String?
-  token       String   @unique @default(cuid())
-  aiSummary   String?
-  source      String?
-  createdAt   DateTime @default(now())
+  id                  String    @id @default(cuid())
+  leadNo              Int?      @unique
+  domainId            String
+  domain              Domain    @relation(fields: [domainId], references: [id])
+  scanId              String    @unique
+  scan                Scan      @relation(fields: [scanId], references: [id])
+  email               String?
+  emailSent           Boolean   @default(false)
+  sentAt              DateTime?
+  pdfPath             String?
+  token               String    @unique @default(cuid())
+  aiSummary           String?
+  source              String?
+  reportFirstViewedAt DateTime?
+  reportViewCount     Int       @default(0)
+  scoreDropAlert      Boolean   @default(false)
+  convertedAt         DateTime?
+  createdAt           DateTime  @default(now())
 }

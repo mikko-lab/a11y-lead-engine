@@ -3,7 +3,7 @@ import { Worker, Job } from 'bullmq'
 import path from 'path'
 import fs from 'fs'
 import { connection, ScanJobData } from './queue'
-import { scanUrl } from './scanner'
+import { scanSite } from './scanner'
 import { findEmail } from './enrichment'
 import { generatePdf } from './pdf'
 import { sendReport } from './mailer'
@@ -19,6 +19,8 @@ if (!fs.existsSync(REPORTS_DIR)) fs.mkdirSync(REPORTS_DIR)
 const SENDER_NAME = process.env.SENDER_NAME ?? 'WP Saavutettavuus'
 const SENDER_URL  = process.env.SENDER_URL  ?? 'https://wpsaavutettavuus.fi'
 
+const SCORE_DROP_THRESHOLD = 15 // pisteet — tämän verran laskettava jotta alert aktivoituu
+
 async function processJob(job: Job<ScanJobData>) {
   const { url, sendEmail, emailOverride, source } = job.data
   console.log(`\n[${new Date().toLocaleTimeString('fi-FI')}] Aloitetaan: ${url}`)
@@ -33,11 +35,11 @@ async function processJob(job: Job<ScanJobData>) {
     return { skipped: true, reason: filter.reason }
   }
 
-  // 1. Scan
+  // 1. Monisivuinen tarkistus
   await job.updateProgress(20)
-  console.log(`  Skannataan...`)
-  const scan = await scanUrl(url)
-  console.log(`  Pisteet: ${scan.score}/100 | Kriittistä: ${scan.critical} | Vakavia: ${scan.serious} | Kohtalaista: ${scan.moderate}`)
+  console.log(`  Tarkistetaan...`)
+  const scan = await scanSite(url)
+  console.log(`  Pisteet: ${scan.score}/100 | Sivuja: ${scan.pagesScanned} | Kriittistä: ${scan.critical} | Vakavia: ${scan.serious} | Kohtalaista: ${scan.moderate}`)
 
   // 2. Find email
   await job.updateProgress(50)
@@ -96,6 +98,12 @@ async function processJob(job: Job<ScanJobData>) {
     },
   })
 
+  // Hae edellinen skannaus ennen tallennusta — score drop -vertailua varten
+  const prevScan = await db.scan.findFirst({
+    where: { domainId: domain.id },
+    orderBy: { scannedAt: 'desc' },
+  })
+
   const dbScan = await db.scan.create({
     data: {
       domainId: domain.id,
@@ -106,12 +114,38 @@ async function processJob(job: Job<ScanJobData>) {
       minor: scan.minor,
       passed: scan.passed,
       violations: JSON.stringify(scan.violations),
+      pagesScanned: scan.pagesScanned,
+      pageBreakdown: scan.pageBreakdown.length > 0 ? JSON.stringify(scan.pageBreakdown) : undefined,
     },
   })
 
+  // Tallenna violations omaan tauluun
+  if (scan.violations.length > 0) {
+    await db.violation.createMany({
+      data: scan.violations.map((v) => ({
+        scanId: dbScan.id,
+        ruleId: v.id,
+        impact: v.impact ?? undefined,
+        description: v.description,
+        help: v.help,
+        wcag: v.wcag,
+        element: v.element ?? undefined,
+        pageUrl: v.pageUrl ?? undefined,
+      })),
+    })
+  }
+
+  // Score drop -tarkistus
+  const scoreDrop = prevScan ? prevScan.score - scan.score : 0
+  const scoreDropAlert = scoreDrop >= SCORE_DROP_THRESHOLD
+  if (scoreDropAlert) {
+    console.log(`  ⚠ Score drop: ${prevScan!.score} → ${scan.score} (−${scoreDrop} pistettä)`)
+  }
+
   // 5. AI-yhteenveto johdolle
   await job.updateProgress(75)
-  const aiSummary = await generateAiSummary(scan.violations, scan.url)
+  const siteContext = ytj?.tolName ?? (filter.hasCta ? 'palveluyritys, jolla on ajanvaraus tai yhteydenotto' : undefined)
+  const aiSummary = await generateAiSummary(scan.violations, scan.url, siteContext)
   if (aiSummary) console.log(`  AI-yhteenveto generoitu`)
 
   // 5b. Generate PDF (tallennetaan sisäiseen käyttöön)
@@ -122,24 +156,34 @@ async function processJob(job: Job<ScanJobData>) {
   fs.writeFileSync(pdfPath, pdf)
 
   // 6. Save lead
+  const leadCount = await db.lead.count()
   const lead = await db.lead.create({
     data: {
+      leadNo: leadCount + 1,
       domainId: domain.id,
       scanId: dbScan.id,
       email: email ?? undefined,
       pdfPath,
       aiSummary: aiSummary ?? undefined,
       source: source ?? undefined,
+      scoreDropAlert,
     },
   })
 
-  // 7. Send email (linkki raporttiin, ei PDF-liitettä)
+  // 7. Send email (linkki analyysiin, ei PDF-liitettä)
   if (email && !domain.optedOut) {
     await job.updateProgress(90)
     const reportUrl = `${SENDER_URL}/r/${lead.token}`
     const optOutUrl = `${SENDER_URL}/opt-out/${lead.token}`
-    console.log(`  Lähetetään sähköposti → ${email} | raportti: ${reportUrl}`)
-    await sendReport({ to: email, scan, reportUrl, optOutUrl, aiSummary: lead.aiSummary, senderName: SENDER_NAME, senderUrl: SENDER_URL })
+
+    // Benchmark: kaikkien skannattujen sivustojen keskiarvo
+    const benchmarkStats = await db.scan.aggregate({ _avg: { score: true }, _count: { id: true } })
+    const benchmark = benchmarkStats._count.id >= 10
+      ? { avg: Math.round(benchmarkStats._avg.score ?? 0), total: benchmarkStats._count.id }
+      : undefined
+
+    console.log(`  Lähetetään sähköposti → ${email} | analyysi: ${reportUrl}`)
+    await sendReport({ to: email, scan, reportUrl, optOutUrl, aiSummary: lead.aiSummary, senderName: SENDER_NAME, senderUrl: SENDER_URL, benchmark })
     await db.lead.update({
       where: { id: lead.id },
       data: { emailSent: true, sentAt: new Date() },
@@ -150,7 +194,7 @@ async function processJob(job: Job<ScanJobData>) {
   await job.updateProgress(100)
   console.log(`  Valmis! Lead #${lead.id}`)
 
-  return { leadId: lead.id, score: scan.score, email }
+  return { leadId: lead.id, score: scan.score, email, pagesScanned: scan.pagesScanned, scoreDropAlert }
 }
 
 const worker = new Worker<ScanJobData>('scan', processJob, {

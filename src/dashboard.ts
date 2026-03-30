@@ -63,7 +63,7 @@ app.post('/api/discover', async (req, res) => {
       return
     }
 
-    sendSSE(`Valmis! Löydettiin ${result.found} domainia, jonoon lisätty ${result.queued} skannausta.`, 'done')
+    sendSSE(`Valmis! Löydettiin ${result.found} domainia, jonoon lisätty ${result.queued} tarkistusta.`, 'done')
   } catch (e: any) {
     sendSSE(`Virhe: ${e.message}`, 'error')
   } finally {
@@ -112,9 +112,10 @@ app.get('/api/monitor/status', (_, res) => {
 // ── API ───────────────────────────────────────────────────────────────────────
 
 app.get('/api/stats', async (_, res) => {
-  const [total, sent, leads] = await Promise.all([
+  const [total, sent, converted, leads] = await Promise.all([
     db.lead.count(),
     db.lead.count({ where: { emailSent: true } }),
+    db.lead.count({ where: { convertedAt: { not: null } } }),
     db.lead.findMany({
       include: { scan: true },
       orderBy: { createdAt: 'desc' },
@@ -123,7 +124,7 @@ app.get('/api/stats', async (_, res) => {
   const scores = leads.map((l) => l.scan.score)
   const avg = scores.length ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : 0
   const withEmail = leads.filter((l) => l.email).length
-  res.json({ total, sent, avg, withEmail })
+  res.json({ total, sent, avg, withEmail, converted })
 })
 
 function conversionScore(lead: any): number {
@@ -131,12 +132,25 @@ function conversionScore(lead: any): number {
   const score = lead.scan.score
   const sixMonthsAgo = new Date(Date.now() - 1000 * 60 * 60 * 24 * 180)
   let pts = 0
-  if (d.isWordPress)                                              pts++
-  if (score >= 40 && score <= 70)                                 pts++
-  if (d.hasCta)                                                   pts++
-  if (!d.hasAccessibilityStatement)                               pts++
-  if (d.siteLastModified && new Date(d.siteLastModified) > sixMonthsAgo) pts++
-  if (d.revenue && d.revenue >= 200_000 && d.revenue <= 5_000_000)      pts++
+
+  // Kipupiste: tarpeeksi rikki korjattavaksi, muttei niin rikki ettei budjettia
+  if (score >= 25 && score <= 65)                                 pts += 2
+  else if (score < 25)                                            pts += 1
+
+  // WordPress: helpompi korjata, tunnettu ekosysteemi
+  if (d.isWordPress)                                              pts += 2
+
+  // Liiketoimintasignaalit
+  if (d.hasCta)                                                   pts += 1
+  if (!d.hasAccessibilityStatement)                               pts += 1  // ei tietoisuutta = mahdollisuus
+  if (d.siteLastModified && new Date(d.siteLastModified) > sixMonthsAgo) pts += 1
+  if (d.revenue && d.revenue >= 200_000 && d.revenue <= 5_000_000)      pts += 2
+
+  // Intentiosignaalit (vahvimmat)
+  if (lead.reportViewCount > 0)                                   pts += 3  // katsoi analyysin
+  if (lead.reportViewCount > 2)                                   pts += 1  // useita katseluja
+  if (lead.scoreDropAlert)                                        pts += 2  // score laski — kiireellinen
+
   return pts
 }
 
@@ -146,6 +160,16 @@ app.get('/api/leads', async (_, res) => {
     orderBy: { createdAt: 'desc' },
   })
   res.json(leads.map(l => ({ ...l, conversionScore: conversionScore(l) })))
+})
+
+app.post('/api/leads/:id/convert', async (req, res) => {
+  const lead = await db.lead.findUnique({ where: { id: req.params.id } })
+  if (!lead) return res.status(404).json({ error: 'Lead ei löydy' })
+  await db.lead.update({
+    where: { id: req.params.id },
+    data: { convertedAt: lead.convertedAt ? null : new Date() },
+  })
+  res.json({ ok: true })
 })
 
 app.post('/api/leads/:id/send', async (req, res) => {
@@ -176,7 +200,13 @@ app.post('/api/leads/:id/send', async (req, res) => {
 
   const reportUrl = `${SENDER_URL}/r/${lead.token}`
   const optOutUrl = `${SENDER_URL}/opt-out/${lead.token}`
-  await sendReport({ to: emailTo, scan, reportUrl, optOutUrl, aiSummary: lead.aiSummary, senderName: SENDER_NAME, senderUrl: SENDER_URL })
+
+  const benchmarkStats = await db.scan.aggregate({ _avg: { score: true }, _count: { id: true } })
+  const benchmark = benchmarkStats._count.id >= 10
+    ? { avg: Math.round(benchmarkStats._avg.score ?? 0), total: benchmarkStats._count.id }
+    : undefined
+
+  await sendReport({ to: emailTo, scan, reportUrl, optOutUrl, aiSummary: lead.aiSummary, senderName: SENDER_NAME, senderUrl: SENDER_URL, benchmark })
   await db.lead.update({
     where: { id: lead.id },
     data: { emailSent: true, sentAt: new Date(), email: emailTo },
@@ -249,6 +279,20 @@ app.get('/r/:token', async (req, res) => {
   })
   if (!lead) return res.status(404).send('Raporttia ei löydy.')
 
+  // Seuraa katsomisia (ei-blokkaava)
+  db.lead.update({
+    where: { token: req.params.token },
+    data: {
+      reportViewCount: { increment: 1 },
+      reportFirstViewedAt: lead.reportFirstViewedAt ?? new Date(),
+    },
+  }).catch(() => {})
+
+  const benchmarkStats = await db.scan.aggregate({ _avg: { score: true }, _count: { id: true } })
+  const benchmark = benchmarkStats._count.id >= 10
+    ? { avg: Math.round(benchmarkStats._avg.score ?? 0), total: benchmarkStats._count.id }
+    : null
+
   const scan = {
     url: lead.domain.url,
     score: lead.scan.score,
@@ -257,8 +301,10 @@ app.get('/r/:token', async (req, res) => {
     moderate: lead.scan.moderate,
     minor: lead.scan.minor,
     passed: lead.scan.passed,
-    violations: JSON.parse(lead.scan.violations) as Array<{id:string,impact:string|null,help:string,wcag:string,element:string|null}>,
+    violations: JSON.parse(lead.scan.violations) as Array<{id:string,impact:string|null,help:string,wcag:string,element:string|null,contrastRatio?:number,expectedContrastRatio?:string,pageUrl?:string}>,
     timestamp: lead.scan.scannedAt.toISOString(),
+    pagesScanned: lead.scan.pagesScanned ?? 1,
+    pageBreakdown: lead.scan.pageBreakdown ? JSON.parse(lead.scan.pageBreakdown) : [],
   }
 
   const domain = new URL(scan.url).hostname
@@ -268,11 +314,19 @@ app.get('/r/:token', async (req, res) => {
   const violationRows = scan.violations.slice(0, 10).map(v => {
     const impactColor = v.impact === 'critical' ? '#ef4444' : v.impact === 'serious' ? '#f97316' : v.impact === 'moderate' ? '#f59e0b' : '#94a3b8'
     const impactLabel = v.impact === 'critical' ? 'Kriittinen' : v.impact === 'serious' ? 'Vakava' : v.impact === 'moderate' ? 'Kohtalainen' : 'Vähäinen'
+    const contrastBadge = v.contrastRatio && v.expectedContrastRatio
+      ? `<span style="background:#1e293b;color:#fbbf24;font-size:11px;font-weight:700;padding:2px 8px;border-radius:4px;font-family:monospace;">${v.contrastRatio.toFixed(1)}:1 / ${v.expectedContrastRatio}</span>`
+      : ''
+    const pageBadge = v.pageUrl && v.pageUrl !== scan.url
+      ? `<span style="color:#64748b;font-size:11px;">📄 ${new URL(v.pageUrl).pathname}</span>`
+      : ''
     return `
     <div style="border:1px solid #1e293b;border-radius:8px;padding:16px;margin-bottom:12px;">
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
         <span style="background:${impactColor};color:#fff;font-size:11px;font-weight:700;padding:2px 8px;border-radius:4px;">${impactLabel}</span>
         <span style="color:#94a3b8;font-size:12px;">${v.wcag}</span>
+        ${contrastBadge}
+        ${pageBadge}
       </div>
       <p style="margin:0 0 6px;font-weight:600;color:#e2e8f0;">${v.help}</p>
       ${v.element ? `<code style="display:block;background:#0f172a;color:#7dd3fc;font-size:11px;padding:8px;border-radius:4px;overflow-x:auto;white-space:pre-wrap;word-break:break-all;">${v.element.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</code>` : ''}
@@ -284,7 +338,7 @@ app.get('/r/:token', async (req, res) => {
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Saavutettavuusraportti — ${domain}</title>
+<title>Sivustoanalyysi — ${domain}</title>
 <style>
   * { box-sizing: border-box; }
   body { font-family: 'Segoe UI', Arial, sans-serif; background: #0f172a; color: #e2e8f0; margin: 0; padding: 0; }
@@ -295,9 +349,9 @@ app.get('/r/:token', async (req, res) => {
 </head>
 <body>
 <div class="container">
-  <p style="color:#94a3b8;font-size:13px;margin:0 0 32px;">Raportti generoitu ${new Date(scan.timestamp).toLocaleDateString('fi-FI')}</p>
+  <p style="color:#94a3b8;font-size:13px;margin:0 0 32px;">Analyysi generoitu ${new Date(scan.timestamp).toLocaleDateString('fi-FI')}</p>
 
-  <h1>Saavutettavuusraportti</h1>
+  <h1>Sivustoanalyysi</h1>
   <p style="color:#94a3b8;margin:4px 0 32px;"><a href="${scan.url}" target="_blank">${scan.url}</a></p>
 
   <div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:40px;">
@@ -313,12 +367,39 @@ app.get('/r/:token', async (req, res) => {
       <div style="font-size:48px;font-weight:800;color:#94a3b8;">${scan.violations.length}</div>
       <div style="color:#94a3b8;font-size:13px;">ongelmaa yhteensä</div>
     </div>
+    ${benchmark ? `
+    <div style="flex:1;min-width:140px;background:#1a1f2e;border:1px solid #334155;border-radius:12px;padding:20px;text-align:center;">
+      <div style="font-size:48px;font-weight:800;color:#64748b;">${benchmark.avg}</div>
+      <div style="color:#64748b;font-size:13px;">keskiarvo (${benchmark.total} sivustoa)</div>
+      <div style="margin-top:8px;font-size:12px;font-weight:700;color:${scan.score < benchmark.avg ? '#ef4444' : '#22c55e'};">
+        ${scan.score < benchmark.avg ? `${benchmark.avg - scan.score} pistettä alle` : `${scan.score - benchmark.avg} pistettä yli`} keskiarvon
+      </div>
+    </div>` : ''}
   </div>
 
   ${lead.aiSummary ? `
   <div style="background:#1e1a2e;border:1px solid #6d28d9;border-radius:12px;padding:24px;margin-bottom:40px;">
     <p style="margin:0 0 12px;font-size:13px;font-weight:700;color:#a78bfa;letter-spacing:1px;text-transform:uppercase;">Yhteenveto johdolle</p>
     <div style="color:#e2e8f0;line-height:1.7;white-space:pre-line;">${lead.aiSummary}</div>
+  </div>` : ''}
+
+  ${(scan as any).smallTouchTargets > 0 || (scan as any).focusOutlineIssues > 0 ? `
+  <div style="background:#1c1a14;border:1px solid #713f12;border-radius:12px;padding:20px;margin-bottom:24px;display:flex;gap:24px;flex-wrap:wrap;">
+    ${(scan as any).smallTouchTargets > 0 ? `<div><span style="color:#fbbf24;font-weight:700;">👆 ${(scan as any).smallTouchTargets} pientä painiketta</span> <span style="color:#94a3b8;font-size:13px;">alle 24×24px (WCAG 2.5.8 — mobiili)</span></div>` : ''}
+    ${(scan as any).focusOutlineIssues > 0 ? `<div><span style="color:#fbbf24;font-weight:700;">⌨ ${(scan as any).focusOutlineIssues} elementtiä ilman focus-kehystä</span> <span style="color:#94a3b8;font-size:13px;">(WCAG 2.4.7 — näppäimistönavigointi)</span></div>` : ''}
+  </div>` : ''}
+
+  ${scan.pageBreakdown && scan.pageBreakdown.length > 1 ? `
+  <div style="margin-bottom:24px;">
+    <p style="font-size:13px;color:#64748b;margin:0 0 10px;">Tarkistettu ${scan.pageBreakdown.length} sivua:</p>
+    ${scan.pageBreakdown.map((p: any) => {
+      const pc = p.score >= 80 ? '#22c55e' : p.score >= 50 ? '#f59e0b' : '#ef4444'
+      return `<div style="display:flex;align-items:center;gap:12px;padding:8px 0;border-bottom:1px solid #1e293b;">
+        <span style="font-weight:700;color:${pc};min-width:40px;">${p.score}</span>
+        <span style="color:#94a3b8;font-size:13px;">${new URL(p.url).pathname || '/'}</span>
+        ${p.critical > 0 ? `<span style="color:#ef4444;font-size:12px;">⚠ ${p.critical}</span>` : ''}
+      </div>`
+    }).join('')}
   </div>` : ''}
 
   <h2 style="font-size:16px;color:#94a3b8;margin:0 0 16px;">Löydetyt ongelmat</h2>
@@ -333,7 +414,7 @@ app.get('/r/:token', async (req, res) => {
   </div>
 
   <p style="text-align:center;color:#94a3b8;font-size:12px;margin-top:40px;">
-    Raportti on luotu automaattisesti axe-core / WCAG 2.2 AA -standardin mukaisesti.<br>
+    Analyysi on luotu automaattisesti axe-core / WCAG 2.2 AA -standardin mukaisesti.<br>
     ${SENDER_NAME} · <a href="https://wpsaavutettavuus.fi" style="color:#94a3b8;">wpsaavutettavuus.fi</a>
   </p>
 </div>
@@ -365,7 +446,7 @@ app.get('/', (_, res) => {
   .tab:hover:not(.active) { color: #e2e8f0; }
   .page { display: none; }
   .page.active { display: block; }
-  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; padding: 24px 32px; }
+  .stats { display: grid; grid-template-columns: repeat(5, 1fr); gap: 16px; padding: 24px 32px; }
   .stat { background: #1a2744; border: 1px solid #1e3a5f; border-radius: 10px; padding: 20px; }
   .stat-value { font-size: 36px; font-weight: 700; color: #00D4AA; }
   .stat-label { font-size: 13px; color: #94a3b8; margin-top: 4px; }
@@ -461,12 +542,13 @@ app.get('/', (_, res) => {
     <div class="stat"><div class="stat-value" id="s-email">–</div><div class="stat-label">Löydetty sähköposti</div></div>
     <div class="stat"><div class="stat-value" id="s-sent">–</div><div class="stat-label">Lähetetty</div></div>
     <div class="stat"><div class="stat-value" id="s-avg">–</div><div class="stat-label">Keskipisteet</div></div>
+    <div class="stat"><div class="stat-value" id="s-converted" style="color:#22c55e">–</div><div class="stat-label">Konvertoitu</div></div>
   </div>
   <div class="toolbar">
     <input id="search" placeholder="Hae domainilla tai yrityksellä..." oninput="render()">
     <label class="toggle-wrap" style="font-size:13px;" onclick="toggleHotOnly()">
       <div class="toggle" id="hot-toggle"></div>
-      Näytä vain parhaat (4–5 p.)
+      Näytä vain parhaat (6+ p.)
     </label>
     <button class="btn btn-ghost btn-sm" onclick="load()">↻ Päivitä</button>
   </div>
@@ -605,7 +687,7 @@ app.get('/', (_, res) => {
 <!-- MODAL -->
 <div class="modal-bg" id="modal">
   <div class="modal">
-    <h3>Lähetä raportti</h3>
+    <h3>Lähetä yhteenveto</h3>
     <input id="modal-email" type="email" placeholder="vastaanottaja@email.fi">
     <div class="modal-actions">
       <button class="btn btn-ghost btn-sm" onclick="closeModal()">Peruuta</button>
@@ -648,15 +730,18 @@ async function load() {
   document.getElementById('s-email').textContent = stats.withEmail
   document.getElementById('s-sent').textContent = stats.sent
   document.getElementById('s-avg').textContent = stats.avg + '/100'
+  document.getElementById('s-converted').textContent = stats.converted
   document.getElementById('header-count').textContent = stats.total + ' leadiä'
   render()
 }
 
 function convDots(pts) {
-  const color = pts === 5 ? '#22c55e' : pts === 4 ? '#00D4AA' : '#334155'
-  const filled = '●'.repeat(pts)
-  const empty = '○'.repeat(5 - pts)
-  return \`<span style="color:\${color};font-size:15px;letter-spacing:1px">\${filled}\${empty}</span>\`
+  // Normalisoi 0–15 → 0–5 pistettä
+  const dots = pts >= 12 ? 5 : pts >= 9 ? 4 : pts >= 6 ? 3 : pts >= 3 ? 2 : pts > 0 ? 1 : 0
+  const color = dots === 5 ? '#22c55e' : dots >= 4 ? '#00D4AA' : dots >= 3 ? '#f59e0b' : '#334155'
+  const filled = '●'.repeat(dots)
+  const empty = '○'.repeat(5 - dots)
+  return \`<span style="color:\${color};font-size:15px;letter-spacing:1px" title="\${pts} pistettä">\${filled}\${empty}</span>\`
 }
 
 function toggleHotOnly() {
@@ -676,7 +761,7 @@ function render() {
     l.domain.url.toLowerCase().includes(q) || (l.domain.company || '').toLowerCase().includes(q)
   )
   if (hotOnly) {
-    filtered = filtered.filter(l => l.conversionScore >= 4)
+    filtered = filtered.filter(l => l.conversionScore >= 6)
     filtered.sort((a, b) => b.conversionScore - a.conversionScore)
   }
   if (scoreSort === 'desc') filtered.sort((a, b) => b.scan.score - a.scan.score)
@@ -696,13 +781,22 @@ function render() {
       ? '<span class="badge badge-sent">✓ Lähetetty</span>'
       : l.email ? '<span class="badge badge-nosend">Ei lähetetty</span>'
       : '<span class="badge badge-noemail">Ei sähköpostia</span>'
-    const hotRow = l.conversionScore === 5 ? ' style="background:#0d1f10"' : ''
+    const isHot = l.conversionScore >= 9
+    const hotRow = isHot ? ' style="background:#0d1f10"' : l.convertedAt ? ' style="background:#0a1a0a"' : ''
+    const viewBadge = l.reportViewCount > 0
+      ? \`<span style="color:#00D4AA;font-size:11px;font-weight:700;margin-left:4px" title="Analyysi katsottu \${l.reportViewCount}x">👁 \${l.reportViewCount}</span>\`
+      : ''
+    const dropBadge = l.scoreDropAlert
+      ? \`<span style="color:#ef4444;font-size:11px;font-weight:700;margin-left:4px" title="Score laski edellisestä skannauksesta">↓ drop</span>\`
+      : ''
+    const convertedLabel = l.convertedAt ? '✓ Konv.' : 'Konv?'
+    const convertedStyle = l.convertedAt ? 'background:#064e3b;color:#6ee7b7' : 'background:#1e3a5f;color:#94a3b8'
     return \`<tr\${hotRow}>
       <td style="font-size:12px;color:#64748b;font-weight:600">#\${l.leadNo}</td>
-      <td><a href="\${l.domain.url}" target="_blank" class="domain">\${domain}</a></td>
+      <td><a href="\${l.domain.url}" target="_blank" class="domain">\${domain}</a>\${viewBadge}\${dropBadge}</td>
       <td style="font-size:13px;color:#94a3b8">\${l.domain.company || '–'}</td>
       <td style="font-size:12px;color:#64748b">\${l.domain.tol ? 'TOL ' + l.domain.tol : '–'}</td>
-      <td><span class="score \${cls}">\${score}</span></td>
+      <td><span class="score \${cls}">\${score}</span>\${l.scan.pagesScanned > 1 ? \`<span style="font-size:10px;color:#64748b;margin-left:4px">\${l.scan.pagesScanned}s</span>\` : ''}</td>
       <td>\${convDots(l.conversionScore)}</td>
       <td style="font-size:12px;color:#94a3b8">\${l.domain.revenue ? (l.domain.revenue >= 1_000_000 ? (l.domain.revenue/1_000_000).toFixed(1) + ' M€' : Math.round(l.domain.revenue/1000) + ' t€') : '–'}</td>
       <td style="color:#94a3b8;font-size:13px">
@@ -719,6 +813,7 @@ function render() {
         <button class="btn btn-primary btn-sm" onclick="openModal('\${l.id}', '\${l.email || ''}')">
           \${l.emailSent ? 'Uudelleen' : 'Lähetä'}
         </button>
+        <button class="btn btn-sm" style="\${convertedStyle}" onclick="toggleConvert('\${l.id}')">\${convertedLabel}</button>
       </div></td>
     </tr>\`
   }).join('')
@@ -805,6 +900,11 @@ async function startRun() {
       categories: selectedYrCats,
     })
   })
+}
+
+async function toggleConvert(id) {
+  await fetch(\`/api/leads/\${id}/convert\`, { method: 'POST' })
+  await load()
 }
 
 function appendLog(ts, msg, type = 'log') {

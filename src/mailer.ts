@@ -23,20 +23,27 @@ export async function sendReport(opts: {
   aiSummary?: string | null
   senderName: string
   senderUrl: string
+  benchmark?: { avg: number; total: number }
 }): Promise<void> {
-  const { to, scan, reportUrl, optOutUrl, aiSummary, senderName, senderUrl } = opts
+  const { to, scan, reportUrl, optOutUrl, aiSummary, senderName, senderUrl, benchmark } = opts
   const transporter = createTransport()
   const domain = new URL(scan.url).hostname
   const score = scan.score
   const issueCount = scan.critical + scan.serious
   const subjectIssueLabel = issueCount === 1 ? '1 korjattava kohta' : `${issueCount} korjattavaa kohtaa`
 
+  // Benchmarkkivertailu
+  const benchmarkLine = benchmark && benchmark.total >= 10
+    ? `Olemme tarkistaneet ${benchmark.total} suomalaista WordPress-sivustoa — keskipisteet ovat <strong>${benchmark.avg}/100</strong>.`
+    : null
+
   // Positiivinen tai neutraali arvio pisteiden mukaan
+  const scoreAbove = benchmark && score > benchmark.avg
   const scoreComment = score >= 85
-    ? `Sivustonne on teknisesti <strong>erinomaisella tasolla</strong> — tulos ${score}/100 on selvästi keskiarvon yläpuolella.`
+    ? `Sivustonne on teknisesti <strong>erinomaisella tasolla</strong> — tulos ${score}/100${scoreAbove ? `, joka on selvästi yli tarkistamamme keskiarvon (${benchmark!.avg}/100)` : ''}.`
     : score >= 70
-    ? `Sivustonne sai saavutettavuusskannuksessa tuloksen <strong>${score}/100</strong>, mikä on hyvä lähtökohta.`
-    : `Ajoin sivustollenne saavutettavuusskannauksen (WCAG 2.2 AA) ja tulos oli <strong>${score}/100</strong>.`
+    ? `Sivustonne sai tarkistuksessa tuloksen <strong>${score}/100</strong>${scoreAbove ? ` — tämä ylittää tarkistamamme keskiarvon (${benchmark!.avg}/100)` : ''}, mikä on hyvä lähtökohta.`
+    : `Ajoin sivustollenne tarkistuksen (WCAG 2.2 AA) ja tulos oli <strong>${score}/100</strong>${benchmark ? ` — tarkistamamme keskiarvo on ${benchmark.avg}/100` : ''}.`
 
   // Markdown → HTML (AI-yhteenveto)
   const aiHtml = aiSummary
@@ -60,7 +67,7 @@ export async function sendReport(opts: {
 <body style="font-family: 'Segoe UI', Arial, sans-serif; font-size: 16px; color: #1a1a1a; max-width: 600px; margin: 0 auto; padding: 32px 24px; background-color: #ffffff;">
 
   <!-- Preheader: näkyy sähköpostiohjelman esikatselussa mutta ei itse viestissä -->
-  <div style="display:none;max-height:0;overflow:hidden;mso-hide:all;">Ajoimme sivustollenne kevyen saavutettavuusskannauksen ja tulos oli ${score >= 85 ? 'loistava' : 'hyvä'} ${score}/100. Tässä yksi huomio...&nbsp;‌&nbsp;‌&nbsp;‌&nbsp;‌&nbsp;‌&nbsp;‌&nbsp;‌&nbsp;‌&nbsp;‌&nbsp;‌&nbsp;‌&nbsp;‌&nbsp;‌&nbsp;‌</div>
+  <div style="display:none;max-height:0;overflow:hidden;mso-hide:all;">Teimme sivustollenne kevyen tarkistuksen ja tulos oli ${score >= 85 ? 'loistava' : 'hyvä'} ${score}/100. Tässä yksi huomio...&nbsp;‌&nbsp;‌&nbsp;‌&nbsp;‌&nbsp;‌&nbsp;‌&nbsp;‌&nbsp;‌&nbsp;‌&nbsp;‌&nbsp;‌&nbsp;‌&nbsp;‌&nbsp;‌</div>
 
   <p style="margin: 0 0 20px; line-height: 1.6;">Hei,</p>
 
@@ -73,13 +80,15 @@ export async function sendReport(opts: {
     ${aiHtml}
   </div>` : ''}
 
-  <p style="margin: 0 0 16px; line-height: 1.6;">Koostin löydöksistä teille lyhyen ja ilmaisen raportin. Näette tarkan ongelmakohdan suoraan tästä linkistä:</p>
+  ${benchmarkLine ? `<p style="margin: 0 0 16px; line-height: 1.6; color: #475569; font-size: 14px;">${benchmarkLine} Teidän tuloksenne: <strong style="color: #1a1a1a;">${score}/100</strong>.</p>` : ''}
+
+  <p style="margin: 0 0 16px; line-height: 1.6;">Koostin löydöksistä teille lyhyen ja ilmaisen yhteenvedon. Näette tarkan ongelmakohdan suoraan tästä linkistä:</p>
 
   <a href="${reportUrl}" style="display: inline-block; background: #0A2540; color: #ffffff; font-weight: 600; font-size: 15px; padding: 14px 28px; border-radius: 6px; text-decoration: none; margin-bottom: 28px;">
-    👉 Katso sivustonne saavutettavuusraportti
+    👉 Katso sivustonne sivustoanalyysi
   </a>
 
-  <p style="margin: 0 0 16px; line-height: 1.6;">Suurin osa vastaavista ongelmista on korjattavissa muutamassa tunnissa. Useimmat auditoinnit jäävät raporttitasolle — minä voin halutessanne auttaa viemään korjaukset suoraan tuotantoon asti.</p>
+  <p style="margin: 0 0 16px; line-height: 1.6;">Suurin osa vastaavista ongelmista on korjattavissa muutamassa tunnissa. Useimmat analyysit jäävät yhteenvetotasolle — minä voin halutessanne auttaa viemään korjaukset suoraan tuotantoon asti.</p>
 
   <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 28px 0;">
 

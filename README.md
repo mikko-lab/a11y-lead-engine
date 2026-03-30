@@ -1,20 +1,25 @@
 # A11Y Lead Engine
 
-Automaattinen saavutettavuusskanneri ja lead-generointimoottori WordPress-sivustoille. Skannaa sivustot WCAG 2.2 AA -standardin mukaan, generoi PDF-raportit ja lähettää personoidun sähköpostin löydetyille asiakkaille.
+Automaattinen saavutettavuusskanneri ja liidien hallintajärjestelmä WordPress-sivustoille. Skannaa sivustot WCAG 2.2 AA -standardin mukaan, generoi AI-yhteenvedon johdolle ja lähettää personoidun sähköpostin raporttilinkillä.
 
 ---
 
 ## Ominaisuudet
 
-- **Pre-filter** — nopea fetch-pohjainen esitarkistus ennen raskasta skannausta (kieli, CTA, WordPress-tunnistus)
+- **Pre-filter** — nopea esitarkistus ennen skannausta (kieli, CTA, WordPress-tunnistus, suurten toimijoiden blocklist)
 - **WCAG 2.2 AA -skannaus** — axe-core + Playwright, pisteet 0–100
-- **PDF-raportti** — yksityiskohtainen raportti löydetyistä ongelmista, korjausehdotuksista ja CTA hinnastoon
-- **Sähköpostilähetys** — personoitu viesti löydetylle kontaktille, raportti liitteenä
-- **Sähköpostin etsintä** — Kontakto → Hunter.io → sivuston scrape
-- **YTJ-integraatio** — hakee Y-tunnuksen ja TOL-toimialakoodin PRH:n avoimesta datasta (ilmainen)
+- **AI-yhteenveto** — Claude Haiku generoi selkokielisen tiivistelmän johtajalle suomeksi
+- **Web-raportti** — asiakkaalle lähetettävä raporttisivu (`/r/:token`), ei PDF-liitettä
+- **Sähköpostilähetys** — personoitu HTML-viesti, positiivinen sävy, GDPR-opt-out
+- **Sähköpostin etsintä** — Hunter.io → WP REST API → sivuston scrape (footer-first)
+- **YTJ-integraatio** — yrityksen nimi, Y-tunnus ja TOL-toimialakoodi
+- **Kauppalehti-integraatio** — liikevaihto ja henkilöstömäärä
 - **Toimialasuodatus** — kohdista ajo valituille TOL-toimialoille
-- **Muutosseuranta** — seuraa domainien HTML-muutoksia, laukaisee uuden skannauksen automaattisesti jos muutos ≥ 20 %
-- **Web-dashboard** — leadit, tilastot, uuden ajon käynnistys, seuranta — kaikki live-lokilla
+- **Lähdeseuranta** — tallentaa mistä hausta kukin liidi löytyi
+- **Lead-numero** — juokseva #-numero helpottaa asiakkaaseen viittaamista
+- **GDPR opt-out** — asiakas voi kieltäytyä lisäviesteistä (`/opt-out/:token`)
+- **Muutosseuranta** — seuraa domainien HTML-muutoksia
+- **Web-dashboard** — leadit, tilastot, uuden ajon käynnistys, live-loki
 
 ---
 
@@ -38,19 +43,21 @@ pnpm db:push
 ### Ympäristömuuttujat
 
 ```env
-DATABASE_URL=file:./dev.db
+DATABASE_URL="file:/opt/a11y/prisma/dev.db"
+REDIS_URL="redis://localhost:6379"
 
-SMTP_HOST=smtp.example.com
+SMTP_HOST=smtp.esimerkki.fi
 SMTP_PORT=587
-SMTP_USER=käyttäjä
+SMTP_USER=user@esimerkki.fi
 SMTP_PASS=salasana
-SMTP_FROM=nimi@example.com
+SMTP_FROM="Nimi <user@esimerkki.fi>"
 
 SENDER_NAME=WP Saavutettavuus
-SENDER_URL=https://wpsaavutettavuus.fi
+SENDER_URL=https://app.wpsaavutettavuus.fi
 
-HUNTER_API_KEY=        # valinnainen
-KONTAKTO_API_KEY=      # valinnainen
+ANTHROPIC_API_KEY=sk-ant-...
+HUNTER_API_KEY=...
+BRAVE_SEARCH_API_KEY=...
 ```
 
 ---
@@ -61,48 +68,25 @@ KONTAKTO_API_KEY=      # valinnainen
 
 ```bash
 # Terminaali 1 — worker
-pnpm dev
+pnpm worker
 
-# Terminaali 2 — web-käyttöliittymä
-pnpm dashboard
+# Terminaali 2 — dashboard
+pnpm dev
 ```
 
-Avaa selaimessa: http://localhost:3030
-
-Dashboardissa on kolme välilehteä:
+Avaa selaimessa: `http://localhost:3000`
 
 | Välilehti | Kuvaus |
 |---|---|
-| **Leadit** | Kaikki skannatut domainit, pisteet, yritystiedot, TOL-koodi, sähköpostien lähetys |
-| **Uusi ajo** | Valitse hakemisto (DuckDuckGo / Tranco / yritykset.fi), toimialasuodatus, käynnistä live-lokilla |
-| **Seuranta** | Muutosseuranta — tarkistaa HTML-muutokset, laukaisee skannauksen automaattisesti |
+| **Leadit** | Kaikki liidit, pisteet, yritystiedot, lähde, manuaalinen lähetys |
+| **Uusi ajo** | Valitse lähde, toimialasuodatus, käynnistä live-lokilla |
+| **Seuranta** | HTML-muutosseuranta, automaattinen uudelleenskannaus |
 
 ### Komentorivi
 
 ```bash
-# Yksittäinen skannaus
-pnpm scan https://esimerkki.fi
-
-# Skannaus + sähköpostilähetys
-pnpm scan https://esimerkki.fi --email
-
-# Skannaus + lähetys tiettyyn osoitteeseen
-pnpm scan https://esimerkki.fi --to asiakas@esimerkki.fi
-
-# Automaattinen haku + skannaus
-pnpm discover --duckduckgo --limit 50 --email
-pnpm discover --tranco --limit 200
-pnpm discover --yritykset
-
-# Tiedostosta
-pnpm discover domains.txt --email
-
-# Muutosseuranta (kaikki kannan domainit)
-pnpm monitor
-pnpm monitor --email
-
-# Näytä viimeisimmät leadit
-pnpm leads
+pnpm scan https://esimerkki.fi          # yksittäinen skannaus
+pnpm scan https://esimerkki.fi --email  # skannaus + sähköposti
 ```
 
 ---
@@ -111,50 +95,38 @@ pnpm leads
 
 ```
 src/
-  cli.ts          — komentorivi-käyttöliittymä
-  dashboard.ts    — Express-palvelin + web-UI (Leadit / Uusi ajo / Seuranta)
-  worker.ts       — BullMQ-worker, käsittelee skannausjonon
-  queue.ts        — Redis/BullMQ-jono
+  dashboard.ts    — Express-palvelin, dashboard-UI, API, /r/:token, /opt-out/:token
+  worker.ts       — BullMQ-worker: skannaus, rikastus, AI-yhteenveto, lähetys
+  queue.ts        — Redis/BullMQ-jono ja ScanJobData-tyyppi
   scanner.ts      — axe-core + Playwright -skannaus
-  prefilter.ts    — nopea fetch-pohjainen esitarkistus
-  monitor.ts      — HTML-muutosseuranta, trigger-pohjainen skannaus
-  enrichment.ts   — sähköpostin etsintä (Kontakto → Hunter → scrape)
-  ytj.ts          — PRH open data -integraatio (Y-tunnus, TOL)
-  kontakto.ts     — Kontakto B2B -integraatio
-  mailer.ts       — sähköpostilähetys + HTML-pohja
-  pdf.ts          — PDF-raportin generointi (jsPDF)
+  prefilter.ts    — nopea esitarkistus + suurten toimijoiden blocklist
+  enrichment.ts   — sähköpostin etsintä (Hunter → WP REST API → scrape)
+  ai-summary.ts   — Claude Haiku -yhteenveto suomeksi
+  mailer.ts       — HTML-sähköpostipohja (MD→HTML, opt-out-linkki)
+  ytj.ts          — PRH open data (Y-tunnus, TOL)
+  kauppalehti.ts  — liikevaihto ja henkilöstö
+  monitor.ts      — HTML-muutosseuranta
+  pdf.ts          — PDF-raportti (sisäinen käyttö)
   discovery/
+    index.ts      — orchestraattori, lähdeseuranta
     duckduckgo.ts — WordPress-sivustojen haku
     tranco.ts     — Tranco .fi -domainlista
-    yritykset.ts  — yritykset.fi -hakemisto
+    yritykset.ts  — yritykset.fi -hakemistoscrape
 ```
 
 ### Skannauksen kulku
 
-1. **Pre-filter** — onko sivu elossa, kieli fi/en/sv, löytyykö CTA/lomake
-2. **Skannaus** — axe-core ajaa WCAG 2.2 AA -tarkistuksen Playwrightilla
-3. **Sähköpostin haku** — Kontakto → Hunter.io → sivuston scrape
-4. **YTJ-haku** — yrityksen nimi, Y-tunnus ja TOL-toimialakoodi
-5. **Tallennus** — Prisma/SQLite
-6. **PDF-generointi** — jsPDF
-7. **Sähköpostilähetys** — nodemailer SMTP
-
-### Muutosseuranta
-
-```
-1. ajo → baseline tallennetaan (hash + pituus)
-2. ajo → verrataan → jos muutos ≥ 20 % → jonoon automaattisesti
-```
-
-Seuranta ei käytä Playwrightia — pelkkä `fetch`, nopea ja kevyt.
+1. **Pre-filter** — onko sivu elossa, kieli fi, löytyykö CTA, blocklist
+2. **Skannaus** — axe-core / WCAG 2.2 AA Playwrightilla
+3. **Sähköpostin haku** — Hunter → WP REST API → scrape
+4. **YTJ + Kauppalehti** — yritystiedot ja taloustiedot
+5. **Tallennus** — Prisma/SQLite (Domain, Scan, Lead)
+6. **AI-yhteenveto** — Claude Haiku, max 3 kohtaa suomeksi
+7. **Sähköpostilähetys** — linkki `/r/:token` -raporttisivulle
 
 ---
 
 ## Toimialasuodatus (YTJ)
-
-Voit kohdistaa ajon halutuille TOL-toimialoille. YTJ tarkistetaan jokaisen domainin kohdalla — muut toimialat ohitetaan, tuntemattomia ei ohiteta.
-
-Kohderyhmätoimialat:
 
 | TOL | Toimiala |
 |---|---|
@@ -169,6 +141,28 @@ Kohderyhmätoimialat:
 | 96 | Muut henkilökohtaiset palvelut |
 
 ---
+
+## Deploy (palvelimelle)
+
+Lokaalisti:
+```bash
+cd /path/to/a11y-lead-engine
+tar -czf a11y.tar.gz --exclude=node_modules --exclude=.git --exclude=reports src prisma package.json pnpm-lock.yaml && scp a11y.tar.gz root@<IP>:/opt/a11y/
+```
+
+Palvelimella:
+```bash
+cd /opt/a11y && tar -xzf a11y.tar.gz && chown -R root:root prisma/ && pnpm install && pnpm db:push --accept-data-loss && pm2 restart all --update-env
+```
+
+> **Huom:** Jos `pnpm db:push` kysyy resetoinnista, vastaa N ja lisää puuttuvat kolumnit manuaalisesti `sqlite3`-komennolla.
+
+---
+
+## Julkiset reitit
+
+- `/r/:token` — asiakkaalle lähetettävä raporttisivu (ei vaadi kirjautumista)
+- `/opt-out/:token` — GDPR-poistumisilmoitus
 
 ## Lisenssi
 

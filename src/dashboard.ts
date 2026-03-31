@@ -2,6 +2,7 @@ import 'dotenv/config'
 import express from 'express'
 import path from 'path'
 import fs from 'fs'
+import rateLimit from 'express-rate-limit'
 import { db } from './db/client'
 import { generatePdf } from './pdf'
 import { sendReport } from './mailer'
@@ -11,6 +12,14 @@ import { runMonitor } from './monitor'
 
 const app = express()
 app.use(express.json())
+
+// Rate limiting
+const publicLimit = rateLimit({ windowMs: 15 * 60 * 1000, max: 60, standardHeaders: true, legacyHeaders: false })
+const dashboardLimit = rateLimit({ windowMs: 15 * 60 * 1000, max: 300, standardHeaders: true, legacyHeaders: false })
+
+app.use('/r/', publicLimit)
+app.use('/opt-out/', publicLimit)
+app.use('/api/', dashboardLimit)
 
 const SENDER_NAME = process.env.SENDER_NAME ?? 'WP Saavutettavuus'
 const SENDER_URL  = process.env.SENDER_URL  ?? 'https://wpsaavutettavuus.fi'

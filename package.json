@@ -23,6 +23,7 @@
     "bullmq": "^5.13.0",
     "dotenv": "^16.4.5",
     "express": "^5.2.1",
+    "express-rate-limit": "^8.3.2",
     "ioredis": "^5.4.1",
     "jspdf": "^2.5.2",
     "marked": "^17.0.5",

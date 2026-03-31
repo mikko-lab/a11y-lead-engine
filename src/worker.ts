@@ -199,7 +199,7 @@ async function processJob(job: Job<ScanJobData>) {
 
 const worker = new Worker<ScanJobData>('scan', processJob, {
   connection,
-  concurrency: 2,
+  concurrency: 1,
 })
 
 worker.on('failed', (job, err) => {

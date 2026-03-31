@@ -16,22 +16,17 @@ const CONTACT_PATHS = [
 export async function findEmail(baseUrl: string): Promise<string | null> {
   const domain = new URL(baseUrl).hostname.replace('www.', '')
 
-  // 1. Kontakto (suomalaiset päätöksentekijät)
-  const kontakto = await lookupKontakto(baseUrl)
-  if (kontakto) {
-    const email = pickBestEmail(kontakto)
-    if (email) return email
-  }
+  // 1–3. Aja rinnakkain: Kontakto, Hunter, WP REST
+  const [kontaktoRes, hunterRes, wpRes] = await Promise.allSettled([
+    lookupKontakto(baseUrl).then(k => k ? pickBestEmail(k) : null),
+    process.env.HUNTER_API_KEY ? hunterLookup(domain) : Promise.resolve(null),
+    wpRestEmail(baseUrl, domain),
+  ])
 
-  // 2. Hunter.io
-  if (process.env.HUNTER_API_KEY) {
-    const email = await hunterLookup(domain)
-    if (email) return email
+  // Palauta ensimmäinen onnistunut tulos prioriteettijärjestyksessä
+  for (const res of [kontaktoRes, hunterRes, wpRes]) {
+    if (res.status === 'fulfilled' && res.value) return res.value
   }
-
-  // 3. WordPress REST API — paljastaa usein käyttäjien nimet
-  const wpEmail = await wpRestEmail(baseUrl, domain)
-  if (wpEmail) return wpEmail
 
   // 4. Sivuston scrape varalla
   return scrapeSite(baseUrl)

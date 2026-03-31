@@ -93,7 +93,7 @@ app.get('/api/monitor/domains', async (_, res) => {
     select: {
       id: true, url: true, company: true, tol: true, tolName: true,
       htmlHash: true, htmlLength: true, lastMonitored: true, changePercent: true,
-      scans: { orderBy: { createdAt: 'desc' }, take: 1, select: { score: true } },
+      scans: { orderBy: { scannedAt: 'desc' }, take: 1, select: { score: true } },
     },
   })
   const filtered = domains.filter(d => !d.scans[0] || d.scans[0].score < 100)

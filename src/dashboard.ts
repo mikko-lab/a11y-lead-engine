@@ -84,9 +84,11 @@ app.get('/api/monitor/domains', async (_, res) => {
     select: {
       id: true, url: true, company: true, tol: true, tolName: true,
       htmlHash: true, htmlLength: true, lastMonitored: true, changePercent: true,
+      scans: { orderBy: { createdAt: 'desc' }, take: 1, select: { score: true } },
     },
   })
-  res.json(domains)
+  const filtered = domains.filter(d => !d.scans[0] || d.scans[0].score < 100)
+  res.json(filtered.map(({ scans, ...rest }) => rest))
 })
 
 app.post('/api/monitor/run', async (req, res) => {
@@ -240,6 +242,13 @@ app.get('/api/leads/:id/pdf', async (req, res) => {
   res.setHeader('Content-Type', 'application/pdf')
   res.setHeader('Content-Disposition', `attachment; filename="${new URL(lead.domain.url).hostname}-raportti.pdf"`)
   res.send(pdf)
+})
+
+app.delete('/api/leads/:id', async (req, res) => {
+  const lead = await db.lead.findUnique({ where: { id: req.params.id } })
+  if (!lead) return res.status(404).json({ error: 'Lead ei löydy' })
+  await db.lead.delete({ where: { id: req.params.id } })
+  res.json({ ok: true })
 })
 
 // ── Opt-out (ei autentikaatiota) ──────────────────────────────────────────────
@@ -760,6 +769,7 @@ function render() {
   let filtered = leads.filter(l =>
     l.domain.url.toLowerCase().includes(q) || (l.domain.company || '').toLowerCase().includes(q)
   )
+  filtered = filtered.filter(l => l.scan.score < 100)
   if (hotOnly) {
     filtered = filtered.filter(l => l.conversionScore >= 6)
     filtered.sort((a, b) => b.conversionScore - a.conversionScore)
@@ -814,6 +824,7 @@ function render() {
           \${l.emailSent ? 'Uudelleen' : 'Lähetä'}
         </button>
         <button class="btn btn-sm" style="\${convertedStyle}" onclick="toggleConvert('\${l.id}')">\${convertedLabel}</button>
+        <button class="btn btn-sm" style="background:#1e293b;color:#ef4444" onclick="deleteLead('\${l.id}')">Poista</button>
       </div></td>
     </tr>\`
   }).join('')
@@ -904,6 +915,12 @@ async function startRun() {
 
 async function toggleConvert(id) {
   await fetch(\`/api/leads/\${id}/convert\`, { method: 'POST' })
+  await load()
+}
+
+async function deleteLead(id) {
+  if (!confirm('Poistetaanko tämä lead?')) return
+  await fetch(\`/api/leads/\${id}\`, { method: 'DELETE' })
   await load()
 }
 

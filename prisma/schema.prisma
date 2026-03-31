@@ -83,5 +83,6 @@ model Lead {
   reportViewCount     Int       @default(0)
   scoreDropAlert      Boolean   @default(false)
   convertedAt         DateTime?
+  notes               String?
   createdAt           DateTime  @default(now())
 }

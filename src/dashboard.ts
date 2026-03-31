@@ -260,6 +260,14 @@ app.delete('/api/leads/:id', async (req, res) => {
   res.json({ ok: true })
 })
 
+app.post('/api/leads/:id/notes', async (req, res) => {
+  const { notes } = req.body
+  const lead = await db.lead.findUnique({ where: { id: req.params.id } })
+  if (!lead) return res.status(404).json({ error: 'Lead ei löydy' })
+  await db.lead.update({ where: { id: req.params.id }, data: { notes } })
+  res.json({ ok: true })
+})
+
 // ── Opt-out (ei autentikaatiota) ──────────────────────────────────────────────
 app.get('/opt-out/:token', async (req, res) => {
   const lead = await db.lead.findUnique({
@@ -716,6 +724,19 @@ app.get('/', (_, res) => {
 
 <div class="toast" id="toast"></div>
 
+<!-- MUISTIINPANOT MODAL -->
+<div id="notes-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:1000;align-items:center;justify-content:center;">
+  <div style="background:#1e293b;border-radius:12px;padding:24px;width:480px;max-width:90vw;">
+    <h3 style="margin:0 0 16px;color:#f1f5f9">Muistiinpanot</h3>
+    <input type="hidden" id="notes-lead-id">
+    <textarea id="notes-textarea" rows="8" style="width:100%;background:#0f172a;color:#f1f5f9;border:1px solid #334155;border-radius:8px;padding:12px;font-size:14px;resize:vertical;box-sizing:border-box;" placeholder="Kirjoita muistiinpanoja tästä asiakkaasta..."></textarea>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px;">
+      <button class="btn btn-ghost btn-sm" onclick="closeNotes()">Peruuta</button>
+      <button class="btn btn-primary btn-sm" onclick="saveNotes()">Tallenna</button>
+    </div>
+  </div>
+</div>
+
 <script>
 // ── Data ──────────────────────────────────────────────────────────────────────
 let leads = []
@@ -833,6 +854,7 @@ function render() {
           \${l.emailSent ? 'Uudelleen' : 'Lähetä'}
         </button>
         <button class="btn btn-sm" style="\${convertedStyle}" onclick="toggleConvert('\${l.id}')">\${convertedLabel}</button>
+        <button class="btn btn-sm" style="background:#1e293b;color:\${l.notes ? '#00D4AA' : '#64748b'}" onclick="openNotes('\${l.id}')" title="\${l.notes ? 'Muistiinpanoja kirjoitettu' : 'Lisää muistiinpanoja'}">✎</button>
         <button class="btn btn-sm" style="background:#1e293b;color:#ef4444" onclick="deleteLead('\${l.id}')">Poista</button>
       </div></td>
     </tr>\`
@@ -930,6 +952,30 @@ async function toggleConvert(id) {
 async function deleteLead(id) {
   if (!confirm('Poistetaanko tämä lead?')) return
   await fetch(\`/api/leads/\${id}\`, { method: 'DELETE' })
+  await load()
+}
+
+function openNotes(id) {
+  const lead = leads.find(l => l.id === id)
+  document.getElementById('notes-lead-id').value = id
+  document.getElementById('notes-textarea').value = lead?.notes || ''
+  document.getElementById('notes-modal').style.display = 'flex'
+  document.getElementById('notes-textarea').focus()
+}
+
+function closeNotes() {
+  document.getElementById('notes-modal').style.display = 'none'
+}
+
+async function saveNotes() {
+  const id = document.getElementById('notes-lead-id').value
+  const notes = document.getElementById('notes-textarea').value
+  await fetch(\`/api/leads/\${id}/notes\`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ notes })
+  })
+  closeNotes()
   await load()
 }
 

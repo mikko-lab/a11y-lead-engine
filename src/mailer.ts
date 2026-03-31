@@ -46,8 +46,11 @@ export async function sendReport(opts: {
     : `Ajoin sivustollenne tarkistuksen (WCAG 2.2 AA) ja tulos oli <strong>${score}/100</strong>${benchmark ? ` — tarkistamamme keskiarvo on ${benchmark.avg}/100` : ''}.`
 
   // Markdown → HTML (AI-yhteenveto)
+  const headingStyle = 'style="font-size:16px;word-break:break-word;overflow-wrap:break-word;hyphens:auto;margin:12px 0 8px;"'
   const aiHtml = aiSummary
-    ? marked.parse(aiSummary, { async: false }) as string
+    ? (marked.parse(aiSummary, { async: false }) as string)
+        .replace(/<h[123]>/g, `<h3 ${headingStyle}>`)
+        .replace(/<\/h[123]>/g, '</h3>')
     : null
 
   const html = `<!DOCTYPE html>

@@ -156,10 +156,11 @@ async function processJob(job: Job<ScanJobData>) {
   fs.writeFileSync(pdfPath, pdf)
 
   // 6. Save lead
-  const leadCount = await db.lead.count()
+  const maxLeadNo = await db.lead.aggregate({ _max: { leadNo: true } })
+  const nextLeadNo = (maxLeadNo._max.leadNo ?? 0) + 1
   const lead = await db.lead.create({
     data: {
-      leadNo: leadCount + 1,
+      leadNo: nextLeadNo,
       domainId: domain.id,
       scanId: dbScan.id,
       email: email ?? undefined,

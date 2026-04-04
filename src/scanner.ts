@@ -188,7 +188,7 @@ export async function scanSite(url: string, sharedBrowser?: Browser): Promise<Sc
     const subPaths = await discoverSubPages(browser, normalized)
     const targetPaths = subPaths
       .filter((p) => SUBPAGE_PATTERNS.some((re) => re.test(p)))
-      .slice(0, 3)
+      .slice(0, 1)  // homepage + 1 alisivu riittää liidiksi
 
     const allResults: ScanResult[] = [homeResult]
     for (const p of targetPaths) {

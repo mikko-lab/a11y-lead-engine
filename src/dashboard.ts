@@ -658,7 +658,7 @@ app.get('/', (_, res) => {
         <label style="opacity:0">toggle</label>
         <label class="toggle-wrap" onclick="toggleEmail()">
           <div class="toggle" id="email-toggle"></div>
-          Lähetä sähköposti automaattisesti
+          Lähetä sähköposti (pois = dry run)
         </label>
       </div>
       <div class="run-field">
@@ -755,7 +755,7 @@ app.get('/', (_, res) => {
 let leads = []
 let activeLead = null
 let selectedSource = 'duckduckgo'
-let sendEmailOn = false
+let sendEmailOn = true
 let selectedTols = []
 let selectedYrCats = []
 let runEvtSource = null

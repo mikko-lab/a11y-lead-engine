@@ -183,8 +183,9 @@ async function processJob(job: Job<ScanJobData>) {
     },
   })
 
-  // 7. Send email (linkki analyysiin, ei PDF-liitettä)
-  if (email && sendEmail && !domain.optedOut) {
+  // 7. Send email — automaattisesti aina kun email löytyy (ellei opted out)
+  // sendEmail=false voidaan käyttää dry run -ajoihin
+  if (email && sendEmail !== false && !domain.optedOut) {
     await job.updateProgress(90)
     const reportUrl = `${SENDER_URL}/r/${lead.token}`
     const optOutUrl = `${SENDER_URL}/opt-out/${lead.token}`

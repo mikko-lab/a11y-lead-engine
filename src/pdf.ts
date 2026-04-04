@@ -70,8 +70,8 @@ export function generatePdf(scan: ScanResult, senderName: string, senderUrl: str
     doc.setFont('helvetica', 'normal')
     doc.setFontSize(8)
     doc.setTextColor(...C.inkMute)
-    doc.text(`info@${senderUrl.replace('https://', '')}`, margin, fy)
-    doc.text(senderUrl.replace('https://', ''), pageW / 2, fy, { align: 'center' })
+    doc.text('info@wpsaavutettavuus.fi', margin, fy)
+    doc.text('wpsaavutettavuus.fi', pageW / 2, fy, { align: 'center' })
     doc.text(`Sivu ${pageNum} / ${total}`, pageW - margin, fy, { align: 'right' })
   }
 

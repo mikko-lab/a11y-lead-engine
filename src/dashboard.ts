@@ -260,6 +260,13 @@ app.delete('/api/leads/:id', async (req, res) => {
   res.json({ ok: true })
 })
 
+app.delete('/api/leads', async (req, res) => {
+  const { ids } = req.body as { ids: string[] }
+  if (!Array.isArray(ids) || ids.length === 0) return res.status(400).json({ error: 'ids puuttuu' })
+  await db.lead.deleteMany({ where: { id: { in: ids } } })
+  res.json({ ok: true, deleted: ids.length })
+})
+
 app.post('/api/leads/:id/notes', async (req, res) => {
   const { notes } = req.body
   const lead = await db.lead.findUnique({ where: { id: req.params.id } })
@@ -577,11 +584,17 @@ app.get('/', (_, res) => {
       Näytä vain parhaat (6+ p.)
     </label>
     <button class="btn btn-ghost btn-sm" onclick="load()">↻ Päivitä</button>
+    <span id="bulk-bar" style="display:none;align-items:center;gap:8px;">
+      <span id="bulk-count" style="font-size:13px;color:#94a3b8;"></span>
+      <button class="btn btn-sm" style="background:#431407;color:#fed7aa" onclick="bulkDelete()">Poista valitut</button>
+      <button class="btn btn-ghost btn-sm" onclick="clearSelection()">Peruuta</button>
+    </span>
   </div>
   <div class="table-wrap">
     <table>
       <thead>
         <tr>
+          <th><input type="checkbox" id="select-all" onchange="toggleSelectAll(this.checked)" style="cursor:pointer"></th>
           <th>#</th>
           <th>Domain</th>
           <th>Yritys</th>
@@ -748,6 +761,7 @@ let selectedYrCats = []
 let runEvtSource = null
 let hotOnly = false
 let scoreSort = null // null | 'desc' | 'asc'
+let selectedIds = new Set()
 
 const TOL_OPTIONS = [${TOL_OPTIONS}]
 const YR_CATEGORIES = [${YR_CATEGORIES}]
@@ -832,6 +846,7 @@ function render() {
     const convertedLabel = l.convertedAt ? '✓ Konv.' : 'Konv?'
     const convertedStyle = l.convertedAt ? 'background:#0d3d2e;color:#5eead4' : 'background:#1e3a5f;color:#94a3b8'
     return \`<tr\${hotRow}>
+      <td><input type="checkbox" \${selectedIds.has(l.id) ? 'checked' : ''} onchange="toggleSelect('\${l.id}', this.checked)" style="cursor:pointer"></td>
       <td style="font-size:12px;color:#64748b;font-weight:600">#\${l.leadNo}</td>
       <td><a href="\${l.domain.url}" target="_blank" class="domain">\${domain}</a>\${viewBadge}\${dropBadge}</td>
       <td style="font-size:13px;color:#94a3b8">\${l.domain.company || '–'}</td>
@@ -859,6 +874,7 @@ function render() {
       </div></td>
     </tr>\`
   }).join('')
+  updateBulkBar()
 }
 
 // ── Uusi ajo ──────────────────────────────────────────────────────────────────
@@ -952,6 +968,61 @@ async function toggleConvert(id) {
 async function deleteLead(id) {
   if (!confirm('Poistetaanko tämä lead?')) return
   await fetch(\`/api/leads/\${id}\`, { method: 'DELETE' })
+  await load()
+}
+
+function toggleSelect(id, checked) {
+  if (checked) selectedIds.add(id)
+  else selectedIds.delete(id)
+  updateBulkBar()
+}
+
+function toggleSelectAll(checked) {
+  const checkboxes = document.querySelectorAll('#tbody input[type=checkbox]')
+  const visibleIds = [...checkboxes].map(cb => cb.closest('tr').querySelector('input[type=checkbox]'))
+  document.querySelectorAll('#tbody input[type=checkbox]').forEach(cb => {
+    const row = cb.closest('tr')
+    const onchange = cb.getAttribute('onchange')
+    const id = onchange?.match(/toggleSelect\('([^']+)'/)?.[1]
+    if (!id) return
+    cb.checked = checked
+    if (checked) selectedIds.add(id)
+    else selectedIds.delete(id)
+  })
+  updateBulkBar()
+}
+
+function updateBulkBar() {
+  const bar = document.getElementById('bulk-bar')
+  const count = document.getElementById('bulk-count')
+  const selectAll = document.getElementById('select-all')
+  if (selectedIds.size > 0) {
+    bar.style.display = 'flex'
+    count.textContent = selectedIds.size + ' valittu'
+  } else {
+    bar.style.display = 'none'
+  }
+  const allBoxes = document.querySelectorAll('#tbody input[type=checkbox]')
+  if (selectAll) selectAll.checked = allBoxes.length > 0 && [...allBoxes].every(cb => cb.checked)
+}
+
+function clearSelection() {
+  selectedIds.clear()
+  document.querySelectorAll('#tbody input[type=checkbox]').forEach(cb => cb.checked = false)
+  const selectAll = document.getElementById('select-all')
+  if (selectAll) selectAll.checked = false
+  updateBulkBar()
+}
+
+async function bulkDelete() {
+  if (selectedIds.size === 0) return
+  if (!confirm(\`Poistetaanko \${selectedIds.size} leadia?\`)) return
+  await fetch('/api/leads', {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ids: [...selectedIds] })
+  })
+  selectedIds.clear()
   await load()
 }
 

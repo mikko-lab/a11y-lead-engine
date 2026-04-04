@@ -1,4 +1,4 @@
-import { chromium } from 'playwright'
+import { chromium, Browser } from 'playwright'
 import { lookupKontakto, pickBestEmail } from './kontakto'
 
 const EMAIL_RE = /[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/g
@@ -13,7 +13,7 @@ const CONTACT_PATHS = [
   '/tietoa-meista',
 ]
 
-export async function findEmail(baseUrl: string): Promise<string | null> {
+export async function findEmail(baseUrl: string, sharedBrowser?: Browser): Promise<string | null> {
   const domain = new URL(baseUrl).hostname.replace('www.', '')
 
   // 1–3. Aja rinnakkain: Kontakto, Hunter, WP REST
@@ -29,7 +29,7 @@ export async function findEmail(baseUrl: string): Promise<string | null> {
   }
 
   // 4. Sivuston scrape varalla
-  return scrapeSite(baseUrl)
+  return scrapeSite(baseUrl, sharedBrowser)
 }
 
 async function hunterLookup(domain: string): Promise<string | null> {
@@ -74,9 +74,10 @@ async function wpRestEmail(baseUrl: string, domain: string): Promise<string | nu
   return null
 }
 
-async function scrapeSite(baseUrl: string): Promise<string | null> {
+async function scrapeSite(baseUrl: string, sharedBrowser?: Browser): Promise<string | null> {
   const origin = baseUrl.replace(/\/$/, '')
-  const browser = await chromium.launch({ headless: true, args: ['--no-sandbox'] })
+  const ownBrowser = !sharedBrowser
+  const browser = sharedBrowser ?? await chromium.launch({ headless: true, args: ['--no-sandbox'] })
 
   try {
     const page = await browser.newPage()
@@ -113,7 +114,7 @@ async function scrapeSite(baseUrl: string): Promise<string | null> {
   } catch {
     return null
   } finally {
-    await browser.close()
+    if (ownBrowser) await browser.close()
   }
 }
 

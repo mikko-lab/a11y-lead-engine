@@ -172,11 +172,12 @@ async function discoverSubPages(browser: Browser, baseUrl: string): Promise<stri
   }
 }
 
-export async function scanSite(url: string): Promise<ScanResult> {
+export async function scanSite(url: string, sharedBrowser?: Browser): Promise<ScanResult> {
   const normalized = url.startsWith('http') ? url : `https://${url}`
   const origin = new URL(normalized).origin
 
-  const browser = await chromium.launch({
+  const ownBrowser = !sharedBrowser
+  const browser = sharedBrowser ?? await chromium.launch({
     headless: true,
     args: ['--no-sandbox', '--disable-setuid-sandbox'],
   })
@@ -237,7 +238,7 @@ export async function scanSite(url: string): Promise<ScanResult> {
       focusOutlineIssues,
     }
   } finally {
-    await browser.close()
+    if (ownBrowser) await browser.close()
   }
 }
 

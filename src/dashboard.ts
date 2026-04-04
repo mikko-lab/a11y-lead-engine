@@ -755,7 +755,7 @@ app.get('/', (_, res) => {
 let leads = []
 let activeLead = null
 let selectedSource = 'duckduckgo'
-let sendEmailOn = false
+let sendEmailOn = true
 let selectedTols = []
 let selectedYrCats = []
 let runEvtSource = null
@@ -1187,6 +1187,7 @@ document.getElementById('modal').addEventListener('click', e => {
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 initRunPage()
+document.getElementById('email-toggle').classList.toggle('on', sendEmailOn)
 load()
 setInterval(load, 30000)
 </script>

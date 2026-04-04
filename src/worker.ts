@@ -5,6 +5,7 @@ import fs from 'fs'
 import { connection, ScanJobData } from './queue'
 import { scanSite } from './scanner'
 import { findEmail } from './enrichment'
+import { browserPool } from './browser-pool'
 import { generatePdf } from './pdf'
 import { sendReport } from './mailer'
 import { db } from './db/client'
@@ -38,12 +39,23 @@ async function processJob(job: Job<ScanJobData>) {
   // 1. Monisivuinen tarkistus
   await job.updateProgress(20)
   console.log(`  Tarkistetaan...`)
-  const scan = await scanSite(url)
+  const browser = await browserPool.acquire()
+  const scan = await scanSite(url, browser)
   console.log(`  Pisteet: ${scan.score}/100 | Sivuja: ${scan.pagesScanned} | Kriittistä: ${scan.critical} | Vakavia: ${scan.serious} | Kohtalaista: ${scan.moderate}`)
 
-  // 2. Find email
+  // Early exit — ei liidi-potentiaalia
+  if (scan.score === 0) {
+    console.log(`  → Score 0, ohitetaan (täysin rikki tai estetty)`)
+    return { skipped: true, reason: 'score_zero' }
+  }
+  if (scan.score >= 95) {
+    console.log(`  → Score ${scan.score}/100, ohitetaan (ei ongelmia myytävänä)`)
+    return { skipped: true, reason: 'score_too_high' }
+  }
+
+  // 2. Find email — aina ON, ellei emailOverride
   await job.updateProgress(50)
-  const email = emailOverride ?? (sendEmail ? await findEmail(url) : null)
+  const email = emailOverride ?? await findEmail(url, browser)
   console.log(`  Sähköposti: ${email ?? 'ei löydy'}`)
 
   // 3. YTJ — yritystiedot
@@ -206,6 +218,9 @@ const worker = new Worker<ScanJobData>('scan', processJob, {
 worker.on('failed', (job, err) => {
   console.error(`[VIRHE] ${job?.data.url}: ${err.message}`)
 })
+
+process.on('SIGTERM', async () => { await browserPool.shutdown() })
+process.on('SIGINT',  async () => { await browserPool.shutdown() })
 
 console.log('A11Y Lead Engine worker käynnissä...')
 console.log('Odottaa töitä. Lisää työ ajamalla: pnpm scan <url>\n')

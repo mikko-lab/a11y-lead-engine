@@ -334,11 +334,11 @@ app.get('/r/:token', async (req, res) => {
   }
 
   const domain = new URL(scan.url).hostname
-  const scoreColor = scan.score >= 80 ? '#22c55e' : scan.score >= 50 ? '#f59e0b' : '#ef4444'
+  const scoreColor = scan.score >= 80 ? '#00D4AA' : scan.score >= 50 ? '#f59e0b' : '#fb923c'
   const issueCount = scan.critical + scan.serious
 
   const violationRows = scan.violations.slice(0, 10).map(v => {
-    const impactColor = v.impact === 'critical' ? '#ef4444' : v.impact === 'serious' ? '#f97316' : v.impact === 'moderate' ? '#f59e0b' : '#94a3b8'
+    const impactColor = v.impact === 'critical' ? '#fb923c' : v.impact === 'serious' ? '#f59e0b' : v.impact === 'moderate' ? '#60a5fa' : '#94a3b8'
     const impactLabel = v.impact === 'critical' ? 'Kriittinen' : v.impact === 'serious' ? 'Vakava' : v.impact === 'moderate' ? 'Kohtalainen' : 'Vähäinen'
     const contrastBadge = v.contrastRatio && v.expectedContrastRatio
       ? `<span style="background:#1e293b;color:#fbbf24;font-size:11px;font-weight:700;padding:2px 8px;border-radius:4px;font-family:monospace;">${v.contrastRatio.toFixed(1)}:1 / ${v.expectedContrastRatio}</span>`
@@ -386,7 +386,7 @@ app.get('/r/:token', async (req, res) => {
       <div style="color:#94a3b8;font-size:13px;">/ 100 pistettä</div>
     </div>
     <div style="flex:1;min-width:140px;background:#1e293b;border-radius:12px;padding:20px;text-align:center;">
-      <div style="font-size:48px;font-weight:800;color:#ef4444;">${issueCount}</div>
+      <div style="font-size:48px;font-weight:800;color:#fb923c;">${issueCount}</div>
       <div style="color:#94a3b8;font-size:13px;">vakavaa ongelmaa</div>
     </div>
     <div style="flex:1;min-width:140px;background:#1e293b;border-radius:12px;padding:20px;text-align:center;">
@@ -395,9 +395,9 @@ app.get('/r/:token', async (req, res) => {
     </div>
     ${benchmark ? `
     <div style="flex:1;min-width:140px;background:#1a1f2e;border:1px solid #334155;border-radius:12px;padding:20px;text-align:center;">
-      <div style="font-size:48px;font-weight:800;color:#64748b;">${benchmark.avg}</div>
-      <div style="color:#64748b;font-size:13px;">keskiarvo (${benchmark.total} sivustoa)</div>
-      <div style="margin-top:8px;font-size:12px;font-weight:700;color:${scan.score < benchmark.avg ? '#ef4444' : '#22c55e'};">
+      <div style="font-size:48px;font-weight:800;color:#94a3b8;">${benchmark.avg}</div>
+      <div style="color:#94a3b8;font-size:13px;">keskiarvo (${benchmark.total} sivustoa)</div>
+      <div style="margin-top:8px;font-size:12px;font-weight:700;color:${scan.score < benchmark.avg ? '#fb923c' : '#00D4AA'};">
         ${scan.score < benchmark.avg ? `${benchmark.avg - scan.score} pistettä alle` : `${scan.score - benchmark.avg} pistettä yli`} keskiarvon
       </div>
     </div>` : ''}
@@ -417,13 +417,13 @@ app.get('/r/:token', async (req, res) => {
 
   ${scan.pageBreakdown && scan.pageBreakdown.length > 1 ? `
   <div style="margin-bottom:24px;">
-    <p style="font-size:13px;color:#64748b;margin:0 0 10px;">Tarkistettu ${scan.pageBreakdown.length} sivua:</p>
+    <p style="font-size:13px;color:#94a3b8;margin:0 0 10px;">Tarkistettu ${scan.pageBreakdown.length} sivua:</p>
     ${scan.pageBreakdown.map((p: any) => {
-      const pc = p.score >= 80 ? '#22c55e' : p.score >= 50 ? '#f59e0b' : '#ef4444'
+      const pc = p.score >= 80 ? '#00D4AA' : p.score >= 50 ? '#f59e0b' : '#fb923c'
       return `<div style="display:flex;align-items:center;gap:12px;padding:8px 0;border-bottom:1px solid #1e293b;">
         <span style="font-weight:700;color:${pc};min-width:40px;">${p.score}</span>
         <span style="color:#94a3b8;font-size:13px;">${new URL(p.url).pathname || '/'}</span>
-        ${p.critical > 0 ? `<span style="color:#ef4444;font-size:12px;">⚠ ${p.critical}</span>` : ''}
+        ${p.critical > 0 ? `<span style="color:#fb923c;font-size:12px;">⚠ ${p.critical}</span>` : ''}
       </div>`
     }).join('')}
   </div>` : ''}
@@ -431,10 +431,10 @@ app.get('/r/:token', async (req, res) => {
   <h2 style="font-size:16px;color:#94a3b8;margin:0 0 16px;">Löydetyt ongelmat</h2>
   ${violationRows || '<p style="color:#64748b;">Ei löydettyjä ongelmia.</p>'}
 
-  <div style="background:#0d1f10;border:1px solid #166534;border-radius:12px;padding:28px;margin-top:40px;text-align:center;">
+  <div style="background:#0d2b26;border:1px solid #0f766e;border-radius:12px;padding:28px;margin-top:40px;text-align:center;">
     <p style="margin:0 0 8px;font-size:18px;font-weight:700;">Haluatko ongelmat korjatuksi?</p>
     <p style="margin:0 0 20px;color:#94a3b8;">Suurin osa löydetyistä ongelmista korjataan nopeasti.</p>
-    <a href="https://wpsaavutettavuus.fi" style="display:inline-block;background:#22c55e;color:#0f172a;font-weight:700;font-size:15px;padding:13px 28px;border-radius:8px;text-decoration:none;">
+    <a href="https://wpsaavutettavuus.fi" style="display:inline-block;background:#00D4AA;color:#0f172a;font-weight:700;font-size:15px;padding:13px 28px;border-radius:8px;text-decoration:none;">
       Ota yhteyttä → wpsaavutettavuus.fi
     </a>
   </div>
@@ -467,7 +467,7 @@ app.get('/', (_, res) => {
   header h1 { font-size: 18px; font-weight: 700; color: #fff; }
   header span { color: #00D4AA; font-size: 13px; font-weight: 600; margin-left: auto; }
   .tabs { display: flex; gap: 0; padding: 0 32px; border-bottom: 1px solid #1e3a5f; background: #0A2540; }
-  .tab { padding: 12px 20px; font-size: 14px; font-weight: 600; cursor: pointer; color: #64748b; border-bottom: 2px solid transparent; margin-bottom: -1px; transition: color .15s; }
+  .tab { padding: 12px 20px; font-size: 14px; font-weight: 600; cursor: pointer; color: #94a3b8; border-bottom: 2px solid transparent; margin-bottom: -1px; transition: color .15s; }
   .tab.active { color: #00D4AA; border-bottom-color: #00D4AA; }
   .tab:hover:not(.active) { color: #e2e8f0; }
   .page { display: none; }
@@ -487,18 +487,18 @@ app.get('/', (_, res) => {
   .btn-ghost { background: #1e3a5f; color: #e2e8f0; }
   .btn-lg { padding: 12px 28px; font-size: 15px; }
   table { width: 100%; border-collapse: collapse; }
-  thead th { padding: 10px 16px; text-align: left; font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: .05em; border-bottom: 1px solid #1e3a5f; }
+  thead th { padding: 10px 16px; text-align: left; font-size: 11px; font-weight: 600; color: #94a3b8; text-transform: uppercase; letter-spacing: .05em; border-bottom: 1px solid #1e3a5f; }
   tbody tr { border-bottom: 1px solid #141e2e; transition: background .1s; }
   tbody tr:hover { background: #1a2744; }
   td { padding: 12px 16px; font-size: 14px; vertical-align: middle; }
   .domain { font-weight: 600; color: #e2e8f0; text-decoration: none; }
   .domain:hover { text-decoration: underline; }
   .score { font-weight: 700; font-size: 18px; }
-  .score.green { color: #22c55e; }
+  .score.green { color: #00D4AA; }
   .score.yellow { color: #f59e0b; }
-  .score.red { color: #ef4444; }
+  .score.red { color: #fb923c; }
   .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; }
-  .badge-sent { background: #064e3b; color: #6ee7b7; }
+  .badge-sent { background: #0d3d2e; color: #5eead4; }
   .badge-nosend { background: #1e3a5f; color: #94a3b8; }
   .badge-noemail { background: #1f1f1f; color: #64748b; }
   .actions { display: flex; gap: 6px; }
@@ -506,12 +506,12 @@ app.get('/', (_, res) => {
   /* Uusi ajo */
   .run-wrap { padding: 24px 32px; max-width: 860px; }
   .run-section { margin-bottom: 28px; }
-  .run-section h3 { font-size: 13px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: .06em; margin-bottom: 12px; }
+  .run-section h3 { font-size: 13px; font-weight: 600; color: #94a3b8; text-transform: uppercase; letter-spacing: .06em; margin-bottom: 12px; }
   .source-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
   .source-card { background: #1a2744; border: 2px solid #1e3a5f; border-radius: 10px; padding: 16px 18px; cursor: pointer; transition: border-color .15s; }
   .source-card.selected { border-color: #00D4AA; }
   .source-card h4 { font-size: 14px; font-weight: 700; margin-bottom: 4px; }
-  .source-card p { font-size: 12px; color: #64748b; line-height: 1.5; }
+  .source-card p { font-size: 12px; color: #94a3b8; line-height: 1.5; }
   .tol-grid { display: flex; flex-wrap: wrap; gap: 8px; }
   .tol-chip { display: flex; align-items: center; gap: 6px; background: #1a2744; border: 1px solid #1e3a5f; border-radius: 6px; padding: 6px 12px; cursor: pointer; font-size: 13px; transition: border-color .15s, background .15s; user-select: none; }
   .tol-chip.selected { background: #0d3d2e; border-color: #00D4AA; color: #00D4AA; }
@@ -530,8 +530,8 @@ app.get('/', (_, res) => {
   .log-line { color: #94a3b8; }
   .log-line.info { color: #60a5fa; }
   .log-line.done { color: #00D4AA; font-weight: 700; }
-  .log-line.error { color: #f87171; }
-  .log-ts { color: #334155; margin-right: 8px; }
+  .log-line.error { color: #fb923c; }
+  .log-ts { color: #64748b; margin-right: 8px; }
   .status-dot { width: 8px; height: 8px; border-radius: 50%; background: #334155; display: inline-block; }
   .status-dot.running { background: #00D4AA; animation: pulse 1s infinite; }
   @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
@@ -543,9 +543,9 @@ app.get('/', (_, res) => {
   .modal input { width: 100%; padding: 9px 14px; border-radius: 8px; border: 1px solid #1e3a5f; background: #0f1923; color: #e2e8f0; font-size: 14px; margin-bottom: 14px; outline: none; }
   .modal input:focus { border-color: #00D4AA; }
   .modal-actions { display: flex; gap: 8px; justify-content: flex-end; }
-  .toast { position: fixed; bottom: 24px; right: 24px; background: #064e3b; color: #6ee7b7; border: 1px solid #065f46; padding: 12px 20px; border-radius: 8px; font-size: 14px; font-weight: 600; opacity: 0; transition: opacity .3s; pointer-events: none; z-index: 200; }
+  .toast { position: fixed; bottom: 24px; right: 24px; background: #0d3d2e; color: #5eead4; border: 1px solid #0f766e; padding: 12px 20px; border-radius: 8px; font-size: 14px; font-weight: 600; opacity: 0; transition: opacity .3s; pointer-events: none; z-index: 200; }
   .toast.show { opacity: 1; }
-  .empty { text-align: center; padding: 60px; color: #475569; }
+  .empty { text-align: center; padding: 60px; color: #94a3b8; }
 </style>
 </head>
 <body>
@@ -568,7 +568,7 @@ app.get('/', (_, res) => {
     <div class="stat"><div class="stat-value" id="s-email">–</div><div class="stat-label">Löydetty sähköposti</div></div>
     <div class="stat"><div class="stat-value" id="s-sent">–</div><div class="stat-label">Lähetetty</div></div>
     <div class="stat"><div class="stat-value" id="s-avg">–</div><div class="stat-label">Keskipisteet</div></div>
-    <div class="stat"><div class="stat-value" id="s-converted" style="color:#22c55e">–</div><div class="stat-label">Konvertoitu</div></div>
+    <div class="stat"><div class="stat-value" id="s-converted" style="color:#00D4AA">–</div><div class="stat-label">Konvertoitu</div></div>
   </div>
   <div class="toolbar">
     <input id="search" placeholder="Hae domainilla tai yrityksellä..." oninput="render()">
@@ -777,7 +777,7 @@ async function load() {
 function convDots(pts) {
   // Normalisoi 0–15 → 0–5 pistettä
   const dots = pts >= 12 ? 5 : pts >= 9 ? 4 : pts >= 6 ? 3 : pts >= 3 ? 2 : pts > 0 ? 1 : 0
-  const color = dots === 5 ? '#22c55e' : dots >= 4 ? '#00D4AA' : dots >= 3 ? '#f59e0b' : '#334155'
+  const color = dots === 5 ? '#00D4AA' : dots >= 4 ? '#5eead4' : dots >= 3 ? '#f59e0b' : '#64748b'
   const filled = '●'.repeat(dots)
   const empty = '○'.repeat(5 - dots)
   return \`<span style="color:\${color};font-size:15px;letter-spacing:1px" title="\${pts} pistettä">\${filled}\${empty}</span>\`
@@ -822,15 +822,15 @@ function render() {
       : l.email ? '<span class="badge badge-nosend">Ei lähetetty</span>'
       : '<span class="badge badge-noemail">Ei sähköpostia</span>'
     const isHot = l.conversionScore >= 9
-    const hotRow = isHot ? ' style="background:#0d1f10"' : l.convertedAt ? ' style="background:#0a1a0a"' : ''
+    const hotRow = isHot ? ' style="background:#0d2b26"' : l.convertedAt ? ' style="background:#0d2b26"' : ''
     const viewBadge = l.reportViewCount > 0
       ? \`<span style="color:#00D4AA;font-size:11px;font-weight:700;margin-left:4px" title="Analyysi katsottu \${l.reportViewCount}x">👁 \${l.reportViewCount}</span>\`
       : ''
     const dropBadge = l.scoreDropAlert
-      ? \`<span style="color:#ef4444;font-size:11px;font-weight:700;margin-left:4px" title="Score laski edellisestä skannauksesta">↓ drop</span>\`
+      ? \`<span style="color:#fb923c;font-size:11px;font-weight:700;margin-left:4px" title="Score laski edellisestä skannauksesta">↓ drop</span>\`
       : ''
     const convertedLabel = l.convertedAt ? '✓ Konv.' : 'Konv?'
-    const convertedStyle = l.convertedAt ? 'background:#064e3b;color:#6ee7b7' : 'background:#1e3a5f;color:#94a3b8'
+    const convertedStyle = l.convertedAt ? 'background:#0d3d2e;color:#5eead4' : 'background:#1e3a5f;color:#94a3b8'
     return \`<tr\${hotRow}>
       <td style="font-size:12px;color:#64748b;font-weight:600">#\${l.leadNo}</td>
       <td><a href="\${l.domain.url}" target="_blank" class="domain">\${domain}</a>\${viewBadge}\${dropBadge}</td>
@@ -840,7 +840,7 @@ function render() {
       <td>\${convDots(l.conversionScore)}</td>
       <td style="font-size:12px;color:#94a3b8">\${l.domain.revenue ? (l.domain.revenue >= 1_000_000 ? (l.domain.revenue/1_000_000).toFixed(1) + ' M€' : Math.round(l.domain.revenue/1000) + ' t€') : '–'}</td>
       <td style="color:#94a3b8;font-size:13px">
-        \${l.scan.critical > 0 ? '<span style="color:#ef4444">⚠ ' + l.scan.critical + ' kriit.</span> ' : ''}
+        \${l.scan.critical > 0 ? '<span style="color:#fb923c">⚠ ' + l.scan.critical + ' kriit.</span> ' : ''}
         \${l.scan.serious > 0 ? '<span style="color:#f59e0b">' + l.scan.serious + ' vak.</span>' : ''}
         \${l.scan.critical === 0 && l.scan.serious === 0 ? '–' : ''}
       </td>
@@ -855,7 +855,7 @@ function render() {
         </button>
         <button class="btn btn-sm" style="\${convertedStyle}" onclick="toggleConvert('\${l.id}')">\${convertedLabel}</button>
         <button class="btn btn-sm" style="background:#1e293b;color:\${l.notes ? '#00D4AA' : '#64748b'}" onclick="openNotes('\${l.id}')" title="\${l.notes ? 'Muistiinpanoja kirjoitettu' : 'Lisää muistiinpanoja'}">✎</button>
-        <button class="btn btn-sm" style="background:#1e293b;color:#ef4444" onclick="deleteLead('\${l.id}')">Poista</button>
+        <button class="btn btn-sm" style="background:#1e293b;color:#fb923c" onclick="deleteLead('\${l.id}')">Poista</button>
       </div></td>
     </tr>\`
   }).join('')
@@ -1056,8 +1056,8 @@ async function loadMonitorDomains() {
       statusBadge = '<span class="badge badge-noemail">Ei muutosta</span>'
       changeTxt = '–'
     } else if (pct >= 20) {
-      statusBadge = '<span class="badge" style="background:#7f1d1d;color:#fca5a5">⚡ Muutos</span>'
-      changeTxt = '<span style="color:#f87171;font-weight:700">' + pct + '%</span>'
+      statusBadge = '<span class="badge" style="background:#431407;color:#fed7aa">⚡ Muutos</span>'
+      changeTxt = '<span style="color:#fb923c;font-weight:700">' + pct + '%</span>'
     } else {
       statusBadge = '<span class="badge badge-nosend">Pieni muutos</span>'
       changeTxt = pct + '%'
@@ -1108,8 +1108,8 @@ async function doSendEmail() {
 function showToast(msg, err = false) {
   const t = document.getElementById('toast')
   t.textContent = msg
-  t.style.background = err ? '#7f1d1d' : '#064e3b'
-  t.style.color = err ? '#fca5a5' : '#6ee7b7'
+  t.style.background = err ? '#431407' : '#0d3d2e'
+  t.style.color = err ? '#fed7aa' : '#5eead4'
   t.classList.add('show')
   setTimeout(() => t.classList.remove('show'), 3000)
 }

@@ -846,7 +846,7 @@ function render() {
     const convertedLabel = l.convertedAt ? '✓ Konv.' : 'Konv?'
     const convertedStyle = l.convertedAt ? 'background:#0d3d2e;color:#5eead4' : 'background:#1e3a5f;color:#94a3b8'
     return \`<tr\${hotRow}>
-      <td><input type="checkbox" \${selectedIds.has(l.id) ? 'checked' : ''} onchange="toggleSelect('\${l.id}', this.checked)" style="cursor:pointer"></td>
+      <td><input type="checkbox" data-id="\${l.id}" \${selectedIds.has(l.id) ? 'checked' : ''} onchange="toggleSelect('\${l.id}', this.checked)" style="cursor:pointer"></td>
       <td style="font-size:12px;color:#64748b;font-weight:600">#\${l.leadNo}</td>
       <td><a href="\${l.domain.url}" target="_blank" class="domain">\${domain}</a>\${viewBadge}\${dropBadge}</td>
       <td style="font-size:13px;color:#94a3b8">\${l.domain.company || '–'}</td>
@@ -978,12 +978,8 @@ function toggleSelect(id, checked) {
 }
 
 function toggleSelectAll(checked) {
-  const checkboxes = document.querySelectorAll('#tbody input[type=checkbox]')
-  const visibleIds = [...checkboxes].map(cb => cb.closest('tr').querySelector('input[type=checkbox]'))
   document.querySelectorAll('#tbody input[type=checkbox]').forEach(cb => {
-    const row = cb.closest('tr')
-    const onchange = cb.getAttribute('onchange')
-    const id = onchange?.match(/toggleSelect\('([^']+)'/)?.[1]
+    const id = cb.dataset.id
     if (!id) return
     cb.checked = checked
     if (checked) selectedIds.add(id)

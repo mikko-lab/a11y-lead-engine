@@ -43,14 +43,16 @@ async function processJob(job: Job<ScanJobData>) {
   const scan = await scanSite(url, browser)
   console.log(`  Pisteet: ${scan.score}/100 | Sivuja: ${scan.pagesScanned} | Kriittistä: ${scan.critical} | Vakavia: ${scan.serious} | Kohtalaista: ${scan.moderate}`)
 
-  // Early exit — ei liidi-potentiaalia
-  if (scan.score === 0) {
-    console.log(`  → Score 0, ohitetaan (täysin rikki tai estetty)`)
-    return { skipped: true, reason: 'score_zero' }
-  }
-  if (scan.score >= 95) {
-    console.log(`  → Score ${scan.score}/100, ohitetaan (ei ongelmia myytävänä)`)
-    return { skipped: true, reason: 'score_too_high' }
+  // Early exit — ei liidi-potentiaalia (manuaaliset ohittavat suodatuksen)
+  if (source !== 'Manuaalinen') {
+    if (scan.score === 0) {
+      console.log(`  → Score 0, ohitetaan (täysin rikki tai estetty)`)
+      return { skipped: true, reason: 'score_zero' }
+    }
+    if (scan.score >= 95) {
+      console.log(`  → Score ${scan.score}/100, ohitetaan (ei ongelmia myytävänä)`)
+      return { skipped: true, reason: 'score_too_high' }
+    }
   }
 
   // 2. Find email — aina ON, ellei emailOverride

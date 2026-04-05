@@ -4,6 +4,7 @@ import { scrapeYritykset, CATEGORIES } from './yritykset'
 import { getFiDomains } from './tranco'
 import { preFilter } from '../prefilter'
 import { lookupYTJ } from '../ytj'
+import { db } from '../db/client'
 
 export { CATEGORIES }
 
@@ -96,6 +97,14 @@ async function queueWordPressSites(
           continue
         }
         if (ytj) onProgress(`  ✓ TOL ${ytj.tol} ${ytj.tolName}: ${url}`)
+      }
+
+      // Ohitetaan jo skannatut domainit
+      const hostname = new URL(url.startsWith('http') ? url : `https://${url}`).hostname
+      const existing = await db.domain.findFirst({ where: { url: { contains: hostname } }, select: { id: true } })
+      if (existing) {
+        onProgress(`  – Jo skannattu, ohitetaan: ${url}`)
+        continue
       }
 
       if (filter.isWP) wordpress++

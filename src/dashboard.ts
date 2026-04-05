@@ -9,6 +9,7 @@ import { sendReport } from './mailer'
 import { discoverFromDuckDuckGo, discoverFromTranco, discoverFromYritykset, CATEGORIES } from './discovery/index'
 import { TOL_NAMES, TARGET_TOLS } from './ytj'
 import { runMonitor } from './monitor'
+import { addScanJob } from './queue'
 
 const app = express()
 app.use(express.json())
@@ -455,6 +456,25 @@ app.get('/r/:token', async (req, res) => {
 </html>`)
 })
 
+// ── Manuaalinen skannaus ──────────────────────────────────────────────────────
+
+app.post('/api/scan/manual', async (req, res) => {
+  const { url } = req.body
+  if (!url || typeof url !== 'string') return res.status(400).json({ error: 'url puuttuu' })
+
+  let normalized = url.trim()
+  if (!/^https?:\/\//i.test(normalized)) normalized = 'https://' + normalized
+
+  try {
+    new URL(normalized)
+  } catch {
+    return res.status(400).json({ error: 'Virheellinen URL' })
+  }
+
+  await addScanJob({ url: normalized, sendEmail: false, source: 'Manuaalinen' })
+  res.json({ ok: true, url: normalized })
+})
+
 // ── Dashboard HTML ────────────────────────────────────────────────────────────
 
 const TOL_OPTIONS = TARGET_TOLS.map(tol => `{ tol: '${tol}', name: '${TOL_NAMES[tol] ?? tol}' }`).join(',')
@@ -565,6 +585,7 @@ app.get('/', (_, res) => {
 <div class="tabs">
   <div class="tab active" onclick="switchTab('leads')">Leadit</div>
   <div class="tab" onclick="switchTab('run')">Uusi ajo</div>
+  <div class="tab" onclick="switchTab('manual')">Manuaalinen</div>
   <div class="tab" onclick="switchTab('monitor')">Seuranta</div>
 </div>
 
@@ -677,6 +698,21 @@ app.get('/', (_, res) => {
   </div>
 </div>
 
+<!-- MANUAALINEN SKANNAUS -->
+<div class="page" id="page-manual">
+  <div class="run-wrap">
+    <div class="run-section">
+      <h3>Manuaalinen skannaus</h3>
+      <p style="font-size:13px;color:#64748b;margin-bottom:16px;">Syötä URL ja lisää se skannausjonoon. Worker käsittelee sen seuraavaksi.</p>
+      <div style="display:flex;gap:12px;align-items:center;">
+        <input id="manual-url" type="text" placeholder="https://esimerkki.fi" style="flex:1;max-width:480px;padding:9px 14px;border-radius:8px;border:1px solid #1e3a5f;background:#1a2744;color:#e2e8f0;font-size:14px;outline:none;" onkeydown="if(event.key==='Enter')scanManual()">
+        <button class="btn btn-primary" onclick="scanManual()">Skannaa</button>
+      </div>
+      <div id="manual-result" style="margin-top:12px;font-size:13px;"></div>
+    </div>
+  </div>
+</div>
+
 <!-- SEURANTA -->
 <div class="page" id="page-monitor">
   <div class="run-wrap">
@@ -768,7 +804,7 @@ const YR_CATEGORIES = [${YR_CATEGORIES}]
 
 // ── Tabs ──────────────────────────────────────────────────────────────────────
 function switchTab(tab) {
-  document.querySelectorAll('.tab').forEach((t, i) => t.classList.toggle('active', ['leads','run','monitor'][i] === tab))
+  document.querySelectorAll('.tab').forEach((t, i) => t.classList.toggle('active', ['leads','run','manual','monitor'][i] === tab))
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'))
   document.getElementById('page-' + tab).classList.add('active')
   if (tab === 'monitor') loadMonitorDomains()
@@ -1066,6 +1102,35 @@ let monitorEvtSource = null
 function toggleMonitorEmail() {
   monitorEmailOn = !monitorEmailOn
   document.getElementById('monitor-email-toggle').classList.toggle('on', monitorEmailOn)
+}
+
+// ── Manuaalinen skannaus ──────────────────────────────────────────────────────
+async function scanManual() {
+  const input = document.getElementById('manual-url')
+  const result = document.getElementById('manual-result')
+  const url = input.value.trim()
+  if (!url) return
+  result.textContent = 'Lisätään jonoon...'
+  result.style.color = '#94a3b8'
+  try {
+    const res = await fetch('/api/scan/manual', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url }),
+    })
+    const data = await res.json()
+    if (!res.ok) {
+      result.textContent = 'Virhe: ' + (data.error ?? res.status)
+      result.style.color = '#fb923c'
+    } else {
+      result.textContent = '✓ Lisätty jonoon: ' + data.url
+      result.style.color = '#00D4AA'
+      input.value = ''
+    }
+  } catch (e) {
+    result.textContent = 'Verkkovirhe: ' + e.message
+    result.style.color = '#fb923c'
+  }
 }
 
 async function startMonitor() {

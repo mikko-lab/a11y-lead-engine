@@ -573,6 +573,7 @@ app.get('/', (_, res) => {
   .toast { position: fixed; bottom: 24px; right: 24px; background: #0d3d2e; color: #5eead4; border: 1px solid #0f766e; padding: 12px 20px; border-radius: 8px; font-size: 14px; font-weight: 600; opacity: 0; transition: opacity .3s; pointer-events: none; z-index: 200; }
   .toast.show { opacity: 1; }
   .empty { text-align: center; padding: 60px; color: #94a3b8; }
+  .active-filter { border: 1px solid #00D4AA !important; color: #00D4AA !important; }
 </style>
 </head>
 <body>
@@ -604,6 +605,12 @@ app.get('/', (_, res) => {
       <div class="toggle" id="hot-toggle"></div>
       Näytä vain parhaat (6+ p.)
     </label>
+    <div style="display:flex;gap:4px;" id="status-filter-btns">
+      <button class="btn btn-ghost btn-sm active-filter" id="sf-all" onclick="setStatusFilter('all')">Kaikki</button>
+      <button class="btn btn-ghost btn-sm" id="sf-nosend" onclick="setStatusFilter('nosend')">Ei lähetetty</button>
+      <button class="btn btn-ghost btn-sm" id="sf-sent" onclick="setStatusFilter('sent')">Lähetetty</button>
+      <button class="btn btn-ghost btn-sm" id="sf-noemail" onclick="setStatusFilter('noemail')">Ei sähköpostia</button>
+    </div>
     <button class="btn btn-ghost btn-sm" onclick="load()">↻ Päivitä</button>
     <span id="bulk-bar" style="display:none;align-items:center;gap:8px;">
       <span id="bulk-count" style="font-size:13px;color:#94a3b8;"></span>
@@ -796,6 +803,7 @@ let selectedTols = []
 let selectedYrCats = []
 let runEvtSource = null
 let hotOnly = false
+let statusFilter = 'all' // 'all' | 'sent' | 'nosend' | 'noemail'
 let scoreSort = null // null | 'desc' | 'asc'
 let selectedIds = new Set()
 
@@ -839,6 +847,13 @@ function toggleHotOnly() {
   render()
 }
 
+function setStatusFilter(val) {
+  statusFilter = val
+  document.querySelectorAll('#status-filter-btns .btn').forEach(b => b.classList.remove('active-filter'))
+  document.getElementById('sf-' + val).classList.add('active-filter')
+  render()
+}
+
 function sortScore() {
   scoreSort = scoreSort === 'desc' ? 'asc' : 'desc'
   render()
@@ -850,6 +865,9 @@ function render() {
     l.domain.url.toLowerCase().includes(q) || (l.domain.company || '').toLowerCase().includes(q)
   )
   filtered = filtered.filter(l => l.scan.score < 100)
+  if (statusFilter === 'sent') filtered = filtered.filter(l => l.emailSent)
+  else if (statusFilter === 'nosend') filtered = filtered.filter(l => !l.emailSent && l.email)
+  else if (statusFilter === 'noemail') filtered = filtered.filter(l => !l.email)
   if (hotOnly) {
     filtered = filtered.filter(l => l.conversionScore >= 6)
     filtered.sort((a, b) => b.conversionScore - a.conversionScore)

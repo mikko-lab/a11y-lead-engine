@@ -10,6 +10,7 @@
     "worker:ai": "tsx src/ai.worker.ts",
     "worker:action": "tsx src/action.worker.ts",
     "worker:replies": "tsx src/reply-monitor.ts",
+    "scheduler": "tsx src/scheduler.ts",
     "discover": "tsx src/cli.ts discover",
     "db:push": "prisma db push",
     "db:studio": "prisma studio",

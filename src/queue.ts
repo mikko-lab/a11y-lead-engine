@@ -5,14 +5,37 @@ export const connection = new IORedis(process.env.REDIS_URL ?? 'redis://localhos
   maxRetriesPerRequest: null,
 })
 
-export const scanQueue = new Queue('scan', { connection })
+// ── Job data types ────────────────────────────────────────────────────────────
 
 export interface ScanJobData {
   url: string
   sendEmail: boolean
-  emailOverride?: string // if set, send to this instead of discovered email
-  source?: string        // e.g. "DuckDuckGo", "yritykset.fi / Ravintolat"
+  emailOverride?: string
+  source?: string
 }
+
+export interface EnrichJobData {
+  leadId: string
+  url: string
+  sendEmail: boolean
+  emailOverride?: string
+}
+
+export interface AiJobData {
+  leadId: string
+  sendEmail: boolean
+}
+
+export interface ActionJobData {
+  leadId: string
+}
+
+// ── Queues ────────────────────────────────────────────────────────────────────
+
+export const scanQueue   = new Queue<ScanJobData>('scan',   { connection })
+export const enrichQueue = new Queue<EnrichJobData>('enrich', { connection })
+export const aiQueue     = new Queue<AiJobData>('ai',     { connection })
+export const actionQueue = new Queue<ActionJobData>('action', { connection })
 
 export async function addScanJob(data: ScanJobData) {
   return scanQueue.add('scan-url', data, {

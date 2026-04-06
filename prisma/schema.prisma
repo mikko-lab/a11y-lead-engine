@@ -82,6 +82,8 @@ model Lead {
   reportFirstViewedAt DateTime?
   reportViewCount     Int       @default(0)
   scoreDropAlert      Boolean   @default(false)
+  status              String    @default("DISCOVERED")
+  lastScannedAt       DateTime?
   convertedAt         DateTime?
   notes               String?
   createdAt           DateTime  @default(now())

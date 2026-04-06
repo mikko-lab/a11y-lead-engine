@@ -5,13 +5,15 @@
   "type": "commonjs",
   "scripts": {
     "scan": "tsx src/cli.ts scan",
-    "worker": "tsx src/worker.ts",
+    "worker:scan": "tsx src/scan.worker.ts",
+    "worker:enrich": "tsx src/enrich.worker.ts",
+    "worker:ai": "tsx src/ai.worker.ts",
+    "worker:action": "tsx src/action.worker.ts",
     "discover": "tsx src/cli.ts discover",
     "db:push": "prisma db push",
     "db:studio": "prisma studio",
     "dashboard": "tsx src/dashboard.ts",
     "monitor": "tsx src/cli.ts monitor",
-    "dev": "tsx src/worker.ts",
     "enrich:emails": "tsx src/enrich-emails.ts"
   },
   "dependencies": {

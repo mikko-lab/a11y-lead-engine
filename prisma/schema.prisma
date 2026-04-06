@@ -81,6 +81,8 @@ model Lead {
   source              String?
   reportFirstViewedAt DateTime?
   reportViewCount     Int       @default(0)
+  emailOpenedAt       DateTime?
+  emailOpenCount      Int       @default(0)
   scoreDropAlert      Boolean   @default(false)
   status              String    @default("DISCOVERED")
   lastScannedAt       DateTime?

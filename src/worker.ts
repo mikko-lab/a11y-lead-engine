@@ -191,6 +191,7 @@ async function processJob(job: Job<ScanJobData>) {
     await job.updateProgress(90)
     const reportUrl = `${SENDER_URL}/r/${lead.token}`
     const optOutUrl = `${SENDER_URL}/opt-out/${lead.token}`
+    const pixelUrl  = `${SENDER_URL}/pixel/${lead.token}`
 
     // Benchmark: kaikkien skannattujen sivustojen keskiarvo
     const benchmarkStats = await db.scan.aggregate({ _avg: { score: true }, _count: { id: true } })
@@ -199,7 +200,7 @@ async function processJob(job: Job<ScanJobData>) {
       : undefined
 
     console.log(`  Lähetetään sähköposti → ${email} | analyysi: ${reportUrl}`)
-    await sendReport({ to: email, scan, reportUrl, optOutUrl, aiSummary: lead.aiSummary, senderName: SENDER_NAME, senderUrl: SENDER_URL, benchmark })
+    await sendReport({ to: email, scan, reportUrl, optOutUrl, pixelUrl, aiSummary: lead.aiSummary, senderName: SENDER_NAME, senderUrl: SENDER_URL, benchmark })
     await db.lead.update({
       where: { id: lead.id },
       data: { emailSent: true, sentAt: new Date() },

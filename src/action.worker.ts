@@ -44,6 +44,7 @@ async function processJob(job: Job<ActionJobData>) {
 
   const reportUrl = `${SENDER_URL}/r/${lead.token}`
   const optOutUrl = `${SENDER_URL}/opt-out/${lead.token}`
+  const pixelUrl  = `${SENDER_URL}/pixel/${lead.token}`
 
   const benchmarkStats = await db.scan.aggregate({ _avg: { score: true }, _count: { id: true } })
   const benchmark = benchmarkStats._count.id >= 10
@@ -57,6 +58,7 @@ async function processJob(job: Job<ActionJobData>) {
     scan: scan as any,
     reportUrl,
     optOutUrl,
+    pixelUrl,
     aiSummary: lead.aiSummary,
     senderName: SENDER_NAME,
     senderUrl: SENDER_URL,

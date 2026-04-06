@@ -20,12 +20,13 @@ export async function sendReport(opts: {
   scan: ScanResult
   reportUrl: string
   optOutUrl: string
+  pixelUrl: string
   aiSummary?: string | null
   senderName: string
   senderUrl: string
   benchmark?: { avg: number; total: number }
 }): Promise<void> {
-  const { to, scan, reportUrl, optOutUrl, aiSummary, senderName, senderUrl, benchmark } = opts
+  const { to, scan, reportUrl, optOutUrl, pixelUrl, aiSummary, senderName, senderUrl, benchmark } = opts
   const transporter = createTransport()
   const domain = new URL(scan.url).hostname
   const score = scan.score
@@ -105,6 +106,8 @@ export async function sendReport(opts: {
     Sait tämän viestin, koska yrityksenne verkkosivusto löytyi julkisesta hakemistosta.<br>
     Jos et halua vastaavia viestejä jatkossa, <a href="${optOutUrl}" style="color: #1a1a1a;">peru tilaus tästä</a>.
   </p>
+
+  <img src="${pixelUrl}" width="1" height="1" style="display:block;width:1px;height:1px;border:0;" alt="">
 
 </body>
 </html>`

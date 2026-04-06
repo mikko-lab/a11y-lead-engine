@@ -20,6 +20,7 @@ const dashboardLimit = rateLimit({ windowMs: 15 * 60 * 1000, max: 300, standardH
 
 app.use('/r/', publicLimit)
 app.use('/opt-out/', publicLimit)
+app.use('/pixel/', publicLimit)
 app.use('/api/', dashboardLimit)
 
 const SENDER_NAME = process.env.SENDER_NAME ?? 'WP Saavutettavuus'
@@ -212,13 +213,14 @@ app.post('/api/leads/:id/send', async (req, res) => {
 
   const reportUrl = `${SENDER_URL}/r/${lead.token}`
   const optOutUrl = `${SENDER_URL}/opt-out/${lead.token}`
+  const pixelUrl  = `${SENDER_URL}/pixel/${lead.token}`
 
   const benchmarkStats = await db.scan.aggregate({ _avg: { score: true }, _count: { id: true } })
   const benchmark = benchmarkStats._count.id >= 10
     ? { avg: Math.round(benchmarkStats._avg.score ?? 0), total: benchmarkStats._count.id }
     : undefined
 
-  await sendReport({ to: emailTo, scan, reportUrl, optOutUrl, aiSummary: lead.aiSummary, senderName: SENDER_NAME, senderUrl: SENDER_URL, benchmark })
+  await sendReport({ to: emailTo, scan, reportUrl, optOutUrl, pixelUrl, aiSummary: lead.aiSummary, senderName: SENDER_NAME, senderUrl: SENDER_URL, benchmark })
   await db.lead.update({
     where: { id: lead.id },
     data: { emailSent: true, sentAt: new Date(), email: emailTo },
@@ -282,6 +284,29 @@ app.post('/api/leads/:id/notes', async (req, res) => {
   if (!lead) return res.status(404).json({ error: 'Lead ei löydy' })
   await db.lead.update({ where: { id: req.params.id }, data: { notes } })
   res.json({ ok: true })
+})
+
+// ── Email open tracking ───────────────────────────────────────────────────────
+const TRACKING_PIXEL = Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64')
+
+app.get('/pixel/:token', async (req, res) => {
+  res.setHeader('Content-Type', 'image/gif')
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate')
+  res.setHeader('Pragma', 'no-cache')
+  res.setHeader('Expires', '0')
+  res.send(TRACKING_PIXEL)
+
+  // Kirjaa avaus ei-blokkaavasti
+  const lead = await db.lead.findUnique({ where: { token: req.params.token } })
+  if (lead) {
+    db.lead.update({
+      where: { token: req.params.token },
+      data: {
+        emailOpenCount: { increment: 1 },
+        emailOpenedAt: lead.emailOpenedAt ?? new Date(),
+      },
+    }).catch(() => {})
+  }
 })
 
 // ── Opt-out (ei autentikaatiota) ──────────────────────────────────────────────

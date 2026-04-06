@@ -10,6 +10,7 @@ import { generatePdf } from './pdf'
 import { sendReport } from './mailer'
 import { db } from './db/client'
 import { preFilter } from './prefilter'
+import { normalizeUrl } from './utils/normalize-url'
 import { lookupYTJ } from './ytj'
 import { lookupKauppalehti } from './kauppalehti'
 import { generateAiSummary } from './ai-summary'
@@ -77,7 +78,7 @@ async function processJob(job: Job<ScanJobData>) {
 
   // 4. Save to DB
   await job.updateProgress(70)
-  const normalized = scan.url
+  const normalized = normalizeUrl(scan.url)
 
   const domain = await db.domain.upsert({
     where: { url: normalized },

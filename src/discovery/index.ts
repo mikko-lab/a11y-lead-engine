@@ -1,4 +1,5 @@
 import { addScanJob } from '../queue'
+import { normalizeUrl } from '../utils/normalize-url'
 import { searchWordPressSites, WP_QUERIES } from './duckduckgo'
 import { scrapeYritykset, CATEGORIES } from './yritykset'
 import { getFiDomains } from './tranco'
@@ -100,8 +101,8 @@ async function queueWordPressSites(
       }
 
       // Ohitetaan jo skannatut domainit
-      const hostname = new URL(url.startsWith('http') ? url : `https://${url}`).hostname
-      const existing = await db.domain.findFirst({ where: { url: { contains: hostname } }, select: { id: true } })
+      const canonical = normalizeUrl(url)
+      const existing = await db.domain.findFirst({ where: { url: canonical }, select: { id: true } })
       if (existing) {
         onProgress(`  – Jo skannattu, ohitetaan: ${url}`)
         continue

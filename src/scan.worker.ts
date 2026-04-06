@@ -1,6 +1,7 @@
 import 'dotenv/config'
 import { Worker, Job } from 'bullmq'
 import { connection, ScanJobData, enrichQueue } from './queue'
+import { normalizeUrl } from './utils/normalize-url'
 import { scanSite } from './scanner'
 import { browserPool } from './browser-pool'
 import { db } from './db/client'
@@ -31,7 +32,7 @@ async function processJob(job: Job<ScanJobData>) {
 
   // 3. Tallenna Domain + Scan + Lead
   await job.updateProgress(60)
-  const normalized = scan.url
+  const normalized = normalizeUrl(scan.url)
 
   const domain = await db.domain.upsert({
     where: { url: normalized },

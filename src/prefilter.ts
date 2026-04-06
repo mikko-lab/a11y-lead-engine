@@ -1,4 +1,19 @@
+import { db } from './db/client'
+
 const ACCEPTED_LANGS = ['fi', 'en', 'sv']
+
+// ── DB-blocklist välimuisti ───────────────────────────────────────────────────
+let dbBlocklist = new Set<string>()
+let dbBlocklistLoadedAt = 0
+const DB_BLOCKLIST_TTL = 5 * 60 * 1000 // 5 min
+
+async function getDbBlocklist(): Promise<Set<string>> {
+  if (Date.now() - dbBlocklistLoadedAt < DB_BLOCKLIST_TTL) return dbBlocklist
+  const rows = await db.blocklist.findMany({ select: { domain: true } })
+  dbBlocklist = new Set(rows.map(r => r.domain.toLowerCase()))
+  dbBlocklistLoadedAt = Date.now()
+  return dbBlocklist
+}
 const TIMEOUT_MS = 6000
 
 // Kaupungit, viranomaiset, koulut — tarkistetaan hostnamesta ennen fetchiä
@@ -35,8 +50,12 @@ const KUNTA_RE = /\b(kunta|kaupunki|seurakunta|virasto|ministeri|valtion|valtio|
 // Enterprise-signaalit HTML-otsikosta / meta-descriptionista
 const ENTERPRISE_TITLE_RE = /\boyj\b|\bkonserni\b|\bgroup\b|\bholding\b|\binternational\b|\bglobal\b|\bcorporation\b|\bcorp\b/i
 
-function isGovOrEnterprise(hostname: string, html: string): string | null {
+async function isGovOrEnterprise(hostname: string, html: string): Promise<string | null> {
   const host = hostname.replace(/^www\./, '')
+
+  // DB-blocklist (käyttäjän hallitsema)
+  const userBlocklist = await getDbBlocklist()
+  if (userBlocklist.has(host)) return 'käyttäjän blocklist'
 
   // Tunnetut suuret domainit
   if (LARGE_DOMAIN_BLOCKLIST.has(host)) return 'suuri yritys/media'
@@ -104,7 +123,7 @@ export async function preFilter(url: string): Promise<PreFilterResult> {
 
   // Enterprise / gov filter
   const hostname = new URL(normalized).hostname
-  const govReason = isGovOrEnterprise(hostname, html)
+  const govReason = await isGovOrEnterprise(hostname, html)
   if (govReason) {
     return { ...empty, reason: govReason }
   }

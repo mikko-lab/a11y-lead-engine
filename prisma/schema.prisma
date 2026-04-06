@@ -7,6 +7,13 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model Blocklist {
+  id        String   @id @default(cuid())
+  domain    String   @unique  // hostname, esim. "yle.fi"
+  reason    String?
+  createdAt DateTime @default(now())
+}
+
 model Domain {
   id                        String    @id @default(cuid())
   url                       String    @unique

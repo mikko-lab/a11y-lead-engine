@@ -278,6 +278,28 @@ app.delete('/api/leads', async (req, res) => {
   res.json({ ok: true, deleted: ids.length })
 })
 
+// ── Blocklist API ─────────────────────────────────────────────────────────────
+app.get('/api/blocklist', async (_, res) => {
+  const rows = await db.blocklist.findMany({ orderBy: { createdAt: 'desc' } })
+  res.json(rows)
+})
+
+app.post('/api/blocklist', async (req, res) => {
+  const raw = (req.body.domain ?? '').trim().toLowerCase().replace(/^www\./, '')
+  if (!raw) return res.status(400).json({ error: 'domain puuttuu' })
+  const entry = await db.blocklist.upsert({
+    where: { domain: raw },
+    create: { domain: raw, reason: req.body.reason ?? null },
+    update: { reason: req.body.reason ?? null },
+  })
+  res.json(entry)
+})
+
+app.delete('/api/blocklist/:id', async (req, res) => {
+  await db.blocklist.delete({ where: { id: req.params.id } })
+  res.json({ ok: true })
+})
+
 app.post('/api/leads/:id/notes', async (req, res) => {
   const { notes } = req.body
   const lead = await db.lead.findUnique({ where: { id: req.params.id } })
@@ -621,6 +643,7 @@ app.get('/', (_, res) => {
   <div class="tab" onclick="switchTab('run')">Uusi ajo</div>
   <div class="tab" onclick="switchTab('manual')">Manuaalinen</div>
   <div class="tab" onclick="switchTab('monitor')">Seuranta</div>
+  <div class="tab" onclick="switchTab('blocklist')">Blocklist</div>
 </div>
 
 <!-- LEADIT -->
@@ -812,6 +835,29 @@ app.get('/', (_, res) => {
   </div>
 </div>
 
+<!-- BLOCKLIST -->
+<div class="page" id="page-blocklist">
+  <div class="run-wrap" style="max-width:600px">
+    <h3 style="margin:0 0 16px;font-size:15px">Blocklist</h3>
+    <p style="color:#94a3b8;font-size:13px;margin:0 0 20px">Domainit jotka ohitetaan automaattisesti skannauksessa. Kirjoita pelkkä hostname, esim. <code>yle.fi</code>.</p>
+    <div style="display:flex;gap:8px;margin-bottom:20px">
+      <input id="bl-domain" placeholder="domain.fi" style="flex:1;padding:9px 14px;border-radius:8px;border:1px solid #1e3a5f;background:#0f1923;color:#e2e8f0;font-size:14px;outline:none">
+      <input id="bl-reason" placeholder="Syy (vapaaehtoinen)" style="flex:1;padding:9px 14px;border-radius:8px;border:1px solid #1e3a5f;background:#0f1923;color:#e2e8f0;font-size:14px;outline:none">
+      <button class="btn btn-primary btn-sm" onclick="addBlocklist()">Lisää</button>
+    </div>
+    <table style="width:100%">
+      <thead><tr>
+        <th style="text-align:left;padding:8px;font-size:12px;color:#64748b">Domain</th>
+        <th style="text-align:left;padding:8px;font-size:12px;color:#64748b">Syy</th>
+        <th style="text-align:left;padding:8px;font-size:12px;color:#64748b">Lisätty</th>
+        <th></th>
+      </tr></thead>
+      <tbody id="bl-tbody"></tbody>
+    </table>
+    <div id="bl-empty" style="display:none;color:#64748b;font-size:13px;padding:16px 0">Blocklist on tyhjä.</div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <!-- MUISTIINPANOT MODAL -->
@@ -846,10 +892,11 @@ const YR_CATEGORIES = [${YR_CATEGORIES}]
 
 // ── Tabs ──────────────────────────────────────────────────────────────────────
 function switchTab(tab) {
-  document.querySelectorAll('.tab').forEach((t, i) => t.classList.toggle('active', ['leads','run','manual','monitor'][i] === tab))
+  document.querySelectorAll('.tab').forEach((t, i) => t.classList.toggle('active', ['leads','run','manual','monitor','blocklist'][i] === tab))
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'))
   document.getElementById('page-' + tab).classList.add('active')
   if (tab === 'monitor') loadMonitorDomains()
+  if (tab === 'blocklist') loadBlocklist()
 }
 
 // ── Stats & Leads ─────────────────────────────────────────────────────────────
@@ -1336,6 +1383,44 @@ function showToast(msg, err = false) {
 document.getElementById('modal').addEventListener('click', e => {
   if (e.target === document.getElementById('modal')) closeModal()
 })
+
+// ── Blocklist ─────────────────────────────────────────────────────────────────
+async function loadBlocklist() {
+  const rows = await fetch('/api/blocklist').then(r => r.json())
+  const tbody = document.getElementById('bl-tbody')
+  const empty = document.getElementById('bl-empty')
+  if (!rows.length) { tbody.innerHTML = ''; empty.style.display = ''; return }
+  empty.style.display = 'none'
+  tbody.innerHTML = rows.map(r => \`<tr>
+    <td style="padding:8px;font-size:13px;color:#e2e8f0">\${r.domain}</td>
+    <td style="padding:8px;font-size:13px;color:#94a3b8">\${r.reason || '–'}</td>
+    <td style="padding:8px;font-size:12px;color:#64748b">\${new Date(r.createdAt).toLocaleDateString('fi-FI')}</td>
+    <td style="padding:8px"><button class="btn btn-sm" style="background:#431407;color:#fed7aa" onclick="removeBlocklist('\${r.id}')">Poista</button></td>
+  </tr>\`).join('')
+}
+
+async function addBlocklist() {
+  const domain = document.getElementById('bl-domain').value.trim()
+  const reason = document.getElementById('bl-reason').value.trim()
+  if (!domain) return
+  const res = await fetch('/api/blocklist', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ domain, reason }),
+  })
+  if (res.ok) {
+    document.getElementById('bl-domain').value = ''
+    document.getElementById('bl-reason').value = ''
+    await loadBlocklist()
+    showToast('Lisätty blocklistiin')
+  } else showToast('Virhe', true)
+}
+
+async function removeBlocklist(id) {
+  await fetch('/api/blocklist/' + id, { method: 'DELETE' })
+  await loadBlocklist()
+  showToast('Poistettu')
+}
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 initRunPage()

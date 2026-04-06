@@ -1,5 +1,4 @@
 import 'dotenv/config'
-import fs from 'fs'
 import { Worker, Job } from 'bullmq'
 import { connection, ActionJobData } from './queue'
 import { db } from './db/client'
@@ -9,7 +8,7 @@ const SENDER_NAME = process.env.SENDER_NAME ?? 'WP Saavutettavuus'
 const SENDER_URL  = process.env.SENDER_URL  ?? 'https://wpsaavutettavuus.fi'
 
 async function processJob(job: Job<ActionJobData>) {
-  const { leadId } = job.data
+  const { leadId, sendEmail } = job.data
 
   const lead = await db.lead.findUnique({
     where: { id: leadId },
@@ -19,8 +18,8 @@ async function processJob(job: Job<ActionJobData>) {
 
   console.log(`\n[action] ${lead.domain.url} | status: ${lead.status}`)
 
-  // Lähetä vain QUALIFIED-leideille joilla on email, ja joita ei ole opted out
-  if (lead.status !== 'QUALIFIED' || !lead.email || lead.domain.optedOut) {
+  // Lähetä vain QUALIFIED-leideille joilla on email, ei opted out, eikä dry run
+  if (lead.status !== 'QUALIFIED' || !lead.email || lead.domain.optedOut || sendEmail === false) {
     console.log(`  Ohitetaan (status: ${lead.status}, email: ${lead.email ? 'kyllä' : 'ei'}, optedOut: ${lead.domain.optedOut})`)
     return { skipped: true }
   }

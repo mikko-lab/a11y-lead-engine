@@ -28,6 +28,7 @@ export interface AiJobData {
 
 export interface ActionJobData {
   leadId: string
+  sendEmail: boolean
 }
 
 // ── Queues ────────────────────────────────────────────────────────────────────

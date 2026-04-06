@@ -63,7 +63,7 @@ async function processJob(job: Job<AiJobData>) {
   })
 
   // 3. Ketjuta → action
-  await actionQueue.add('action', { leadId }, {
+  await actionQueue.add('action', { leadId, sendEmail }, {
     attempts: 2,
     backoff: { type: 'exponential', delay: 3000 },
   })

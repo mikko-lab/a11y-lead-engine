@@ -20,6 +20,7 @@ Automaattinen saavutettavuusskanneri ja liidien hallintajärjestelmä WordPress-
 - **GDPR opt-out** — asiakas voi kieltäytyä lisäviesteistä (`/opt-out/:token`)
 - **Muutosseuranta** — seuraa domainien HTML-muutoksia
 - **Web-dashboard** — leadit, tilastot, uuden ajon käynnistys, live-loki
+- **Sähköpostin manuaalinen hallinta** — lisää tai muokkaa asiakkaan sähköpostiosoite suoraan dashboardissa ilman lähetystä
 
 ---
 
@@ -78,7 +79,7 @@ Avaa selaimessa: `http://localhost:3000`
 
 | Välilehti | Kuvaus |
 |---|---|
-| **Leadit** | Kaikki liidit, pisteet, yritystiedot, lähde, manuaalinen lähetys |
+| **Leadit** | Kaikki liidit, pisteet, yritystiedot, lähde, sähköpostin lisäys/muokkaus, manuaalinen lähetys |
 | **Uusi ajo** | Valitse lähde, toimialasuodatus, käynnistä live-lokilla |
 | **Seuranta** | HTML-muutosseuranta, automaattinen uudelleenskannaus |
 

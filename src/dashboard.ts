@@ -254,6 +254,14 @@ app.get('/api/leads/:id/pdf', async (req, res) => {
   res.send(pdf)
 })
 
+app.patch('/api/leads/:id/email', async (req, res) => {
+  const lead = await db.lead.findUnique({ where: { id: req.params.id } })
+  if (!lead) return res.status(404).json({ error: 'Lead ei löydy' })
+  const email = req.body.email?.trim() || null
+  await db.lead.update({ where: { id: req.params.id }, data: { email } })
+  res.json({ ok: true })
+})
+
 app.delete('/api/leads/:id', async (req, res) => {
   const lead = await db.lead.findUnique({ where: { id: req.params.id } })
   if (!lead) return res.status(404).json({ error: 'Lead ei löydy' })
@@ -769,11 +777,12 @@ app.get('/', (_, res) => {
 <!-- MODAL -->
 <div class="modal-bg" id="modal">
   <div class="modal">
-    <h3>Lähetä yhteenveto</h3>
+    <h3 id="modal-title">Lähetä yhteenveto</h3>
     <input id="modal-email" type="email" placeholder="vastaanottaja@email.fi">
     <div class="modal-actions">
       <button class="btn btn-ghost btn-sm" onclick="closeModal()">Peruuta</button>
-      <button class="btn btn-primary btn-sm" onclick="doSendEmail()">Lähetä</button>
+      <button class="btn btn-ghost btn-sm" id="modal-save-btn" onclick="saveEmail()">Tallenna</button>
+      <button class="btn btn-primary btn-sm" id="modal-send-btn" onclick="doSendEmail()">Lähetä</button>
     </div>
   </div>
 </div>
@@ -913,7 +922,7 @@ function render() {
         \${l.scan.serious > 0 ? '<span style="color:#f59e0b">' + l.scan.serious + ' vak.</span>' : ''}
         \${l.scan.critical === 0 && l.scan.serious === 0 ? '–' : ''}
       </td>
-      <td style="font-size:13px;color:#94a3b8">\${l.email || '–'}</td>
+      <td style="font-size:13px;color:#94a3b8;white-space:nowrap">\${l.email || '–'} <button class="btn btn-sm" style="background:transparent;color:#64748b;padding:1px 5px;font-size:12px;vertical-align:middle" onclick="openEditEmail('\${l.id}','\${l.email || ''}')" title="Muokkaa sähköpostia">✎</button></td>
       <td>\${emailBadge}</td>
       <td style="font-size:11px;color:#64748b;max-width:120px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="\${l.source || ''}">\${l.source || '–'}</td>
       <td style="font-size:12px;color:#64748b">\${date}</td>
@@ -1228,19 +1237,48 @@ async function loadMonitorDomains() {
 function openModal(id, email) {
   activeLead = id
   document.getElementById('modal-email').value = email
+  document.getElementById('modal-title').textContent = 'Lähetä yhteenveto'
+  document.getElementById('modal-send-btn').style.display = ''
+  document.getElementById('modal').classList.add('open')
+  document.getElementById('modal-email').focus()
+}
+
+function openEditEmail(id, email) {
+  activeLead = id
+  document.getElementById('modal-email').value = email
+  document.getElementById('modal-title').textContent = 'Muokkaa sähköpostia'
+  document.getElementById('modal-send-btn').style.display = 'none'
   document.getElementById('modal').classList.add('open')
   document.getElementById('modal-email').focus()
 }
 
 function closeModal() {
   document.getElementById('modal').classList.remove('open')
+  document.getElementById('modal-send-btn').style.display = ''
   activeLead = null
+}
+
+async function saveEmail() {
+  const email = document.getElementById('modal-email').value.trim()
+  const btn = document.getElementById('modal-save-btn')
+  btn.textContent = 'Tallennetaan...'
+  btn.disabled = true
+  const res = await fetch('/api/leads/' + activeLead + '/email', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email })
+  })
+  btn.textContent = 'Tallenna'
+  btn.disabled = false
+  closeModal()
+  if (res.ok) { showToast('Sähköposti tallennettu!'); await load() }
+  else showToast('Virhe tallennuksessa', true)
 }
 
 async function doSendEmail() {
   const email = document.getElementById('modal-email').value
   if (!email) return
-  const btn = document.querySelector('.modal .btn-primary')
+  const btn = document.getElementById('modal-send-btn')
   btn.textContent = 'Lähetetään...'
   btn.disabled = true
   const res = await fetch('/api/leads/' + activeLead + '/send', {

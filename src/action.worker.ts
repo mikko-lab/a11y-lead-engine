@@ -18,7 +18,7 @@ async function processJob(job: Job<ActionJobData>) {
 
   console.log(`\n[action] ${lead.domain.url} | status: ${lead.status}`)
 
-  // Lähetä vain QUALIFIED-leideille joilla on email, ei opted out, eikä dry run
+  // Lähetä vain QUALIFIED-leadeille joilla on email, ei opted out, eikä dry run
   if (lead.status !== 'QUALIFIED' || !lead.email || lead.domain.optedOut || sendEmail === false) {
     console.log(`  Ohitetaan (status: ${lead.status}, email: ${lead.email ? 'kyllä' : 'ei'}, optedOut: ${lead.domain.optedOut})`)
     return { skipped: true }

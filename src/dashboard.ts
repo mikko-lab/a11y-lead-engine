@@ -928,6 +928,9 @@ function render() {
     const viewBadge = l.reportViewCount > 0
       ? \`<span style="color:#00D4AA;font-size:11px;font-weight:700;margin-left:4px" title="Analyysi katsottu \${l.reportViewCount}x">👁 \${l.reportViewCount}</span>\`
       : ''
+    const openBadge = l.emailOpenCount > 0
+      ? \`<span style="color:#f59e0b;font-size:11px;font-weight:700;margin-left:4px" title="Sähköposti avattu \${l.emailOpenCount}x — ensimmäinen avaus \${new Date(l.emailOpenedAt).toLocaleDateString('fi-FI')}">✉ \${l.emailOpenCount}</span>\`
+      : ''
     const dropBadge = l.scoreDropAlert
       ? \`<span style="color:#fb923c;font-size:11px;font-weight:700;margin-left:4px" title="Score laski edellisestä skannauksesta">↓ drop</span>\`
       : ''
@@ -948,7 +951,7 @@ function render() {
         \${l.scan.critical === 0 && l.scan.serious === 0 ? '–' : ''}
       </td>
       <td style="font-size:13px;color:#94a3b8;white-space:nowrap">\${l.email || '–'} <button class="btn btn-sm" style="background:transparent;color:#64748b;padding:1px 5px;font-size:12px;vertical-align:middle" onclick="openEditEmail('\${l.id}','\${l.email || ''}')" title="Muokkaa sähköpostia">✎</button></td>
-      <td>\${emailBadge}</td>
+      <td>\${emailBadge}\${openBadge}</td>
       <td style="font-size:11px;color:#64748b;max-width:120px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="\${l.source || ''}">\${l.source || '–'}</td>
       <td style="font-size:12px;color:#64748b">\${date}</td>
       <td><div class="actions">

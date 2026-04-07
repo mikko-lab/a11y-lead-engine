@@ -27,6 +27,26 @@ const SENDER_NAME = process.env.SENDER_NAME ?? 'WP Saavutettavuus'
 const SENDER_URL  = process.env.SENDER_URL  ?? 'https://wpsaavutettavuus.fi'
 const REPORTS_DIR = path.join(process.cwd(), 'reports')
 
+// Poistaa vaaralliset HTML-rakenteet (script-tagit, event handlerit, javascript:-URLt)
+function sanitizeHtml(html: string): string {
+  return html
+    .replace(/<script[\s\S]*?<\/script>/gi, '')
+    .replace(/\bon\w+\s*=\s*["'][^"']*["']/gi, '')
+    .replace(/javascript\s*:/gi, '')
+}
+
+// Estää SSRF — hylkää sisäverkko-osoitteet ja ei-http-protokollat
+function isSafeUrl(urlStr: string): boolean {
+  try {
+    const { protocol, hostname } = new URL(urlStr)
+    if (!['http:', 'https:'].includes(protocol)) return false
+    const h = hostname.toLowerCase()
+    if (['localhost', '127.0.0.1', '::1', '0.0.0.0'].includes(h)) return false
+    if (/^(10\.|172\.(1[6-9]|2[0-9]|3[01])\.|192\.168\.)/.test(h)) return false
+    return true
+  } catch { return false }
+}
+
 // ── SSE: live-lokit discovery-ajoon ──────────────────────────────────────────
 let sseClients: express.Response[] = []
 
@@ -469,7 +489,7 @@ app.get('/r/:token', async (req, res) => {
   ${lead.aiSummary ? `
   <div style="background:#1e1a2e;border:1px solid #6d28d9;border-radius:12px;padding:24px;margin-bottom:40px;">
     <p style="margin:0 0 12px;font-size:13px;font-weight:700;color:#a78bfa;letter-spacing:1px;text-transform:uppercase;">Yhteenveto johdolle</p>
-    <div style="color:#e2e8f0;line-height:1.7;white-space:pre-line;">${lead.aiSummary}</div>
+    <div style="color:#e2e8f0;line-height:1.7;white-space:pre-line;">${sanitizeHtml(lead.aiSummary)}</div>
   </div>` : ''}
 
   ${(scan as any).smallTouchTargets > 0 || (scan as any).focusOutlineIssues > 0 ? `
@@ -525,6 +545,8 @@ app.post('/api/scan/manual', async (req, res) => {
   } catch {
     return res.status(400).json({ error: 'Virheellinen URL' })
   }
+
+  if (!isSafeUrl(normalized)) return res.status(400).json({ error: 'URL ei ole sallittu' })
 
   await addScanJob({ url: normalized, sendEmail: false, source: 'Manuaalinen' })
   res.json({ ok: true, url: normalized })

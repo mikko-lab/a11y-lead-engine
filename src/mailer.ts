@@ -50,6 +50,9 @@ export async function sendReport(opts: {
   const headingStyle = 'style="font-size:16px;word-break:break-word;overflow-wrap:break-word;hyphens:auto;margin:12px 0 8px;"'
   const aiHtml = aiSummary
     ? (marked.parse(aiSummary, { async: false }) as string)
+        .replace(/<script[\s\S]*?<\/script>/gi, '')
+        .replace(/\bon\w+\s*=\s*["'][^"']*["']/gi, '')
+        .replace(/javascript\s*:/gi, '')
         .replace(/<h[123]>/g, `<h3 ${headingStyle}>`)
         .replace(/<\/h[123]>/g, '</h3>')
     : null

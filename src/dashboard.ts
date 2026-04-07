@@ -328,6 +328,29 @@ app.post('/api/leads/:id/notes', async (req, res) => {
   res.json({ ok: true })
 })
 
+// ── Court Leads API ───────────────────────────────────────────────────────────
+
+app.get('/api/court-leads', async (_, res) => {
+  const leads = await db.courtLead.findMany({
+    orderBy: [{ priorityScore: 'desc' }, { createdAt: 'desc' }],
+  })
+  res.json(leads)
+})
+
+app.post('/api/court-leads/:id/status', async (req, res) => {
+  const { status } = req.body
+  const allowed = ['NEW', 'CONTACTED', 'CONVERTED', 'IRRELEVANT']
+  if (!allowed.includes(status)) return res.status(400).json({ error: 'Virheellinen status' })
+  await db.courtLead.update({ where: { id: req.params.id }, data: { status } })
+  res.json({ ok: true })
+})
+
+app.post('/api/court-leads/:id/notes', async (req, res) => {
+  const { notes } = req.body
+  await db.courtLead.update({ where: { id: req.params.id }, data: { notes } })
+  res.json({ ok: true })
+})
+
 // ── Email open tracking ───────────────────────────────────────────────────────
 const TRACKING_PIXEL = Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64')
 
@@ -666,6 +689,7 @@ app.get('/', (_, res) => {
   <div class="tab" onclick="switchTab('manual')">Manuaalinen</div>
   <div class="tab" onclick="switchTab('monitor')">Seuranta</div>
   <div class="tab" onclick="switchTab('blocklist')">Blocklist</div>
+  <div class="tab" onclick="switchTab('kanteet')">⚖️ Kanteet</div>
 </div>
 
 <!-- LEADIT -->
@@ -880,6 +904,39 @@ app.get('/', (_, res) => {
   </div>
 </div>
 
+<!-- KANTEET -->
+<div class="page" id="page-kanteet">
+  <div style="padding:24px 32px 8px;display:flex;align-items:center;gap:16px;">
+    <h2 style="font-size:18px;font-weight:700;color:#e2e8f0;">⚖️ Oikeuskanteet</h2>
+    <span style="font-size:13px;color:#94a3b8;">Saavutettavuuteen liittyvät tapaukset — FI & NL</span>
+    <button class="btn btn-ghost btn-sm" style="margin-left:auto;" onclick="loadCourtLeads()">↻ Päivitä</button>
+  </div>
+  <div style="padding:0 32px 12px;display:flex;gap:8px;" id="court-filter-btns">
+    <button class="btn btn-ghost btn-sm active-filter" onclick="setCourtFilter('all')">Kaikki</button>
+    <button class="btn btn-ghost btn-sm" onclick="setCourtFilter('NEW')">Uudet</button>
+    <button class="btn btn-ghost btn-sm" onclick="setCourtFilter('CONTACTED')">Kontaktoitu</button>
+    <button class="btn btn-ghost btn-sm" onclick="setCourtFilter('CONVERTED')">Konvertoitu</button>
+    <button class="btn btn-ghost btn-sm" onclick="setCourtFilter('IRRELEVANT')">Ei relevantti</button>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr>
+        <th>Prioriteetti</th>
+        <th>Maa</th>
+        <th>Organisaatio</th>
+        <th>Tapaus</th>
+        <th>Tuomioistuin</th>
+        <th>Pvm</th>
+        <th>Lähestyminen</th>
+        <th>Status</th>
+        <th>Toiminnot</th>
+      </tr></thead>
+      <tbody id="court-tbody"></tbody>
+    </table>
+    <div class="empty" id="court-empty" style="display:none">Ei kanteita. Aja <code>pnpm kanteet</code> terminaalissa.</div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <!-- MUISTIINPANOT MODAL -->
@@ -914,11 +971,12 @@ const YR_CATEGORIES = [${YR_CATEGORIES}]
 
 // ── Tabs ──────────────────────────────────────────────────────────────────────
 function switchTab(tab) {
-  document.querySelectorAll('.tab').forEach((t, i) => t.classList.toggle('active', ['leads','run','manual','monitor','blocklist'][i] === tab))
+  document.querySelectorAll('.tab').forEach((t, i) => t.classList.toggle('active', ['leads','run','manual','monitor','blocklist','kanteet'][i] === tab))
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'))
   document.getElementById('page-' + tab).classList.add('active')
   if (tab === 'monitor') loadMonitorDomains()
   if (tab === 'blocklist') loadBlocklist()
+  if (tab === 'kanteet') loadCourtLeads()
 }
 
 // ── Stats & Leads ─────────────────────────────────────────────────────────────
@@ -1442,6 +1500,80 @@ async function removeBlocklist(id) {
   await fetch('/api/blocklist/' + id, { method: 'DELETE' })
   await loadBlocklist()
   showToast('Poistettu')
+}
+
+// ── Court Leads ───────────────────────────────────────────────────────────────
+let courtLeads = []
+let courtFilter = 'all'
+
+function setCourtFilter(val) {
+  courtFilter = val
+  document.querySelectorAll('#court-filter-btns .btn').forEach(b => b.classList.remove('active-filter'))
+  const idx = ['all','NEW','CONTACTED','CONVERTED','IRRELEVANT'].indexOf(val)
+  document.querySelectorAll('#court-filter-btns .btn')[idx]?.classList.add('active-filter')
+  renderCourtLeads()
+}
+
+function courtStatusBadge(status) {
+  const map = {
+    NEW: ['#1e3a5f','#93c5fd','Uusi'],
+    CONTACTED: ['#1c3a2e','#6ee7b7','Kontaktoitu'],
+    CONVERTED: ['#0d3d2e','#00D4AA','Konvertoitu'],
+    IRRELEVANT: ['#2d1f1f','#f87171','Ei relevantti'],
+  }
+  const [bg, color, label] = map[status] ?? ['#1f1f1f','#94a3b8', status]
+  return \`<span class="badge" style="background:\${bg};color:\${color}">\${label}</span>\`
+}
+
+function courtPriority(score) {
+  if (score == null) return '<span style="color:#64748b">–</span>'
+  const color = score >= 8 ? '#00D4AA' : score >= 5 ? '#f59e0b' : '#64748b'
+  return \`<span style="color:\${color};font-weight:700;font-size:16px">\${score}/10</span>\`
+}
+
+function flagEmoji(country) {
+  return country === 'NL' ? '🇳🇱' : country === 'FI' ? '🇫🇮' : country ?? ''
+}
+
+async function updateCourtStatus(id, status) {
+  await fetch(\`/api/court-leads/\${id}/status\`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ status }),
+  })
+  await loadCourtLeads()
+  showToast('Status päivitetty')
+}
+
+async function loadCourtLeads() {
+  courtLeads = await fetch('/api/court-leads').then(r => r.json())
+  renderCourtLeads()
+}
+
+function renderCourtLeads() {
+  const filtered = courtFilter === 'all' ? courtLeads : courtLeads.filter(c => c.status === courtFilter)
+  const tbody = document.getElementById('court-tbody')
+  const empty = document.getElementById('court-empty')
+  if (!filtered.length) { tbody.innerHTML = ''; empty.style.display = ''; return }
+  empty.style.display = 'none'
+  tbody.innerHTML = filtered.map(c => \`<tr>
+    <td>\${courtPriority(c.priorityScore)}</td>
+    <td style="font-size:20px">\${flagEmoji(c.country)}</td>
+    <td style="font-weight:600;color:#e2e8f0;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">\${c.orgName ?? '<span style="color:#64748b">–</span>'}</td>
+    <td><a href="\${c.caseUrl}" target="_blank" style="color:#60a5fa;font-size:12px;text-decoration:none" title="\${c.caseTitle}">\${c.caseRef}</a></td>
+    <td style="font-size:12px;color:#94a3b8">\${c.court ?? '–'}</td>
+    <td style="font-size:12px;color:#94a3b8">\${c.caseDate ? c.caseDate.slice(0,10) : '–'}</td>
+    <td style="font-size:12px;color:#cbd5e1;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="\${c.contactAngle ?? ''}">\${c.contactAngle ? c.contactAngle.slice(0,80) + (c.contactAngle.length > 80 ? '…' : '') : '–'}</td>
+    <td>\${courtStatusBadge(c.status)}</td>
+    <td>
+      <select style="background:#1a2744;color:#e2e8f0;border:1px solid #1e3a5f;border-radius:6px;padding:4px 8px;font-size:12px;cursor:pointer" onchange="updateCourtStatus('\${c.id}', this.value)">
+        <option value="NEW" \${c.status==='NEW'?'selected':''}>Uusi</option>
+        <option value="CONTACTED" \${c.status==='CONTACTED'?'selected':''}>Kontaktoitu</option>
+        <option value="CONVERTED" \${c.status==='CONVERTED'?'selected':''}>Konvertoitu</option>
+        <option value="IRRELEVANT" \${c.status==='IRRELEVANT'?'selected':''}>Ei relevantti</option>
+      </select>
+    </td>
+  </tr>\`).join('')
 }
 
 // ── Init ──────────────────────────────────────────────────────────────────────

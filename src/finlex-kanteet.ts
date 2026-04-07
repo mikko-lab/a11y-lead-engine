@@ -130,7 +130,7 @@ async function main() {
               const normi = normalizeUrl(`https://${domain}`)
               const olemassa = await db.domain.findFirst({ where: { url: normi } })
               if (!olemassa) {
-                await addScanJob({ url: normi, source: `Finlex / ${viite}` })
+                await addScanJob({ url: normi, sendEmail: false, source: `Finlex / ${viite}` })
                 console.log(`   → Jonoon: ${domain}`)
                 lisatty++
               } else {

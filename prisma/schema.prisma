@@ -7,6 +7,26 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model CourtLead {
+  id            String   @id @default(cuid())
+  source        String   // 'finlex' | 'rechtspraak'
+  caseRef       String   @unique
+  caseUrl       String
+  caseTitle     String
+  court         String?
+  caseDate      String?
+  country       String   @default("FI")
+  orgName       String?
+  orgBusinessId String?
+  orgWebsite    String?
+  priorityScore Int?
+  contactAngle  String?
+  aiSummary     String?
+  status        String   @default("NEW")  // NEW, CONTACTED, CONVERTED, IRRELEVANT
+  notes         String?
+  createdAt     DateTime @default(now())
+}
+
 model Blocklist {
   id        String   @id @default(cuid())
   domain    String   @unique  // hostname, esim. "yle.fi"

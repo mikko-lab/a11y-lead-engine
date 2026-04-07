@@ -18,7 +18,8 @@
     "monitor": "tsx src/cli.ts monitor",
     "enrich:emails": "tsx src/enrich-emails.ts",
     "finlex": "tsx src/finlex-kanteet.ts",
-    "rechtspraak": "tsx src/rechtspraak-kanteet.ts"
+    "rechtspraak": "tsx src/rechtspraak-kanteet.ts",
+    "kanteet": "tsx src/kanteet.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.80.0",

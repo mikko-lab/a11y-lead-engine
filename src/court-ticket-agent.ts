@@ -46,7 +46,11 @@ function rakennaTapauksenTeksti(tapaus: Tapaus): string {
 }
 
 export async function analysoi(tapaus: Tapaus): Promise<Tikettitulos | null> {
-  if (!process.env.ANTHROPIC_API_KEY) return null
+  if (!process.env.ANTHROPIC_API_KEY) {
+    console.error('  [court-ticket-agent] ANTHROPIC_API_KEY puuttuu!')
+    return null
+  }
+  console.log('  [court-ticket-agent] Kutsutaan Claudea...')
 
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
   const tapausteksti = rakennaTapauksenTeksti(tapaus)
@@ -92,7 +96,8 @@ Vastaa VAIN JSON-muodossa (älä lisää selityksiä):
       aiSummary: String(parsed.aiSummary ?? '').slice(0, 1000),
     }
   } catch (e: any) {
-    console.error('  [court-ticket-agent] Virhe:', e?.message ?? e)
+    console.error('  [court-ticket-agent] Virhe:', e?.status ?? '', e?.message ?? e)
+    if (e?.error) console.error('  [court-ticket-agent] Details:', JSON.stringify(e.error))
     return null
   }
 }

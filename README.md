@@ -21,6 +21,10 @@ Automaattinen saavutettavuusskanneri ja liidien hallintajärjestelmä WordPress-
 - **Muutosseuranta** — seuraa domainien HTML-muutoksia
 - **Web-dashboard** — leadit, tilastot, uuden ajon käynnistys, live-loki
 - **Sähköpostin manuaalinen hallinta** — lisää tai muokkaa asiakkaan sähköpostiosoite suoraan dashboardissa ilman lähetystä
+- **Finlex-skräpperi** — hakee saavutettavuuteen liittyvät oikeustapaukset Suomesta (Finlex)
+- **Rechtspraak-integraatio** — hakee WCAG/toegankelijkheid-tapaukset Hollannin tuomioistuimista (virallinen avoin API)
+- **Court Ticket -agentti** — Claude analysoi oikeustapaukset automaattisesti ja luo myyntitiketit: organisaatio, prioriteetti 0–10, ehdotettu yhteydenottokulma
+- **Kanteet-dashboard** — ⚖️ erillinen välilehti oikeuskanteille, status-seuranta (Uusi → Kontaktoitu → Konvertoitu)
 
 ---
 
@@ -82,12 +86,19 @@ Avaa selaimessa: `http://localhost:3000`
 | **Leadit** | Kaikki liidit, pisteet, yritystiedot, lähde, sähköpostin lisäys/muokkaus, manuaalinen lähetys |
 | **Uusi ajo** | Valitse lähde, toimialasuodatus, käynnistä live-lokilla |
 | **Seuranta** | HTML-muutosseuranta, automaattinen uudelleenskannaus |
+| **⚖️ Kanteet** | Oikeustapaukset FI + NL, AI-analyysi, prioriteetti, yhteydenottokulma, status-seuranta |
 
 ### Komentorivi
 
 ```bash
 pnpm scan https://esimerkki.fi          # yksittäinen skannaus
 pnpm scan https://esimerkki.fi --email  # skannaus + sähköposti
+
+# Oikeuskanteet (FI + NL)
+pnpm kanteet              # hae molemmat maat + luo AI-tiketit
+pnpm kanteet --fi         # vain Suomi (Finlex)
+pnpm kanteet --nl         # vain Hollanti (Rechtspraak)
+pnpm kanteet --sisalto    # hae myös tapausten koko teksti (parempi analyysi)
 ```
 
 ---
@@ -109,10 +120,14 @@ src/
   monitor.ts      — HTML-muutosseuranta
   pdf.ts          — PDF-raportti (sisäinen käyttö)
   discovery/
-    index.ts      — orchestraattori, lähdeseuranta
-    duckduckgo.ts — WordPress-sivustojen haku
-    tranco.ts     — Tranco .fi -domainlista
-    yritykset.ts  — yritykset.fi -hakemistoscrape
+    index.ts        — orchestraattori, lähdeseuranta
+    duckduckgo.ts   — WordPress-sivustojen haku
+    tranco.ts       — Tranco .fi -domainlista
+    yritykset.ts    — yritykset.fi -hakemistoscrape
+    finlex.ts       — Finlex-skräpperi (FI oikeustapaukset)
+    rechtspraak.ts  — Rechtspraak.nl API (NL oikeustapaukset)
+  court-ticket-agent.ts — Claude analysoi kanteet → tiketti DB:hen
+  kanteet.ts        — runner: FI + NL haku + analyysi + tallennus
 ```
 
 ### Skannauksen kulku

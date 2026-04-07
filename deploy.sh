@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-SERVER="root@***REMOVED***"
+SERVER="${DEPLOY_SERVER:-root@***REMOVED***}"
 REMOTE_DIR="/opt/a11y"
 
 echo "→ Synkataan tiedostot..."

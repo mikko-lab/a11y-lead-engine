@@ -45,8 +45,8 @@ async function hae(url: string): Promise<string> {
 
 function parseLinkki(html: string): Array<{ href: string; teksti: string }> {
   const tulokset: Array<{ href: string; teksti: string }> = []
-  // Etsi kaikki ankkurilinkit jotka viittaavat oikeuskäytäntöön tai viranomaispäätöksiin
-  const re = /<a\s[^>]*href="(\/fi\/(?:oikeuskaytanto|viranomaiset|tuomiot)[^"]*)"[^>]*>([\s\S]*?)<\/a>/gi
+  // Etsi linkit jotka viittaavat yksittäisiin tapauksiin — URL:ssa on numero lopussa
+  const re = /<a\s[^>]*href="(\/fi\/(?:oikeuskaytanto|viranomaiset)[^"]*\/\d+[^"]*)"[^>]*>([\s\S]*?)<\/a>/gi
   let m
   while ((m = re.exec(html)) !== null) {
     const teksti = m[2].replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim()

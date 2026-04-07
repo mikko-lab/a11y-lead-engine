@@ -1015,7 +1015,7 @@ function render() {
       <td style="font-size:13px;color:#94a3b8">\${l.domain.company || '–'}</td>
       <td style="font-size:12px;color:#64748b">\${l.domain.tol ? 'TOL ' + l.domain.tol : '–'}</td>
       <td><span class="score \${cls}">\${score}</span>\${l.scan.pagesScanned > 1 ? \`<span style="font-size:10px;color:#64748b;margin-left:4px">\${l.scan.pagesScanned}s</span>\` : ''}</td>
-      <td>\${convDots(l.conversionScore)}</td>
+      <td>\${convDots(l.conversionScore)}\${l.priorityScore != null ? \`<span style="margin-left:6px;font-size:11px;font-weight:700;color:\${l.priorityScore >= 7 ? '#00D4AA' : l.priorityScore >= 4 ? '#f59e0b' : '#64748b'}" title="\${l.priorityReason || ''}">\${l.priorityScore}/10</span>\` : ''}</td>
       <td style="font-size:12px;color:#94a3b8">\${l.domain.revenue ? (l.domain.revenue >= 1_000_000 ? (l.domain.revenue/1_000_000).toFixed(1) + ' M€' : Math.round(l.domain.revenue/1000) + ' t€') : '–'}</td>
       <td style="color:#94a3b8;font-size:13px">
         \${l.scan.critical > 0 ? '<span style="color:#fb923c">⚠ ' + l.scan.critical + ' kriit.</span> ' : ''}

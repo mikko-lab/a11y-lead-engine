@@ -1,6 +1,7 @@
 import 'dotenv/config'
 import { Worker, Job } from 'bullmq'
 import { connection, EnrichJobData, aiQueue } from './queue'
+import { scoreLead } from './scoring-agent'
 import { findEmail } from './enrichment'
 import { browserPool } from './browser-pool'
 import { db } from './db/client'
@@ -18,7 +19,7 @@ async function processJob(job: Job<EnrichJobData>) {
   const { leadId, url, sendEmail, emailOverride } = job.data
   console.log(`\n[enrich] ${url}`)
 
-  const lead = await db.lead.findUnique({ where: { id: leadId }, include: { scan: true } })
+  const lead = await db.lead.findUnique({ where: { id: leadId }, include: { scan: true, domain: true } })
   if (!lead) throw new Error(`Lead ${leadId} ei löydy`)
 
   // Scoring gate — liian matala pisteet, ei kannata jatkaa
@@ -60,14 +61,34 @@ async function processJob(job: Job<EnrichJobData>) {
     },
   })
 
-  // 5. Determine status — scoring gate + email check
+  // 5. Scoring-agentti
+  await job.updateProgress(80)
+  const scoring = await scoreLead({
+    score: lead.scan.score,
+    critical: lead.scan.critical,
+    serious: lead.scan.serious,
+    moderate: lead.scan.moderate,
+    revenue: kl?.revenue,
+    employees: kl?.employees,
+    tolName: ytj?.tolName,
+    isWordPress: lead.domain.isWordPress,
+    hasCta: lead.domain.hasCta,
+    hasAccessibilityStatement: lead.domain.hasAccessibilityStatement,
+  })
+  if (scoring) console.log(`  Prioriteetti: ${scoring.priorityScore}/10 — ${scoring.priorityReason}`)
+
+  // 6. Determine status — scoring gate + email check
   const score = lead.scan.score
   const isQualified = !!email && score >= QUALIFIED_THRESHOLD
   const status = isQualified ? 'QUALIFIED' : 'ENRICHED'
 
   await db.lead.update({
     where: { id: leadId },
-    data: { ...(email && { email }), status },
+    data: {
+      ...(email && { email }),
+      status,
+      ...(scoring && { priorityScore: scoring.priorityScore, priorityReason: scoring.priorityReason }),
+    },
   })
 
   console.log(`  Score ${score} | email: ${email ? 'kyllä' : 'ei'} → ${status}`)

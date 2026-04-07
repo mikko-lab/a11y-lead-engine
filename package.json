@@ -16,7 +16,8 @@
     "db:studio": "prisma studio",
     "dashboard": "tsx src/dashboard.ts",
     "monitor": "tsx src/cli.ts monitor",
-    "enrich:emails": "tsx src/enrich-emails.ts"
+    "enrich:emails": "tsx src/enrich-emails.ts",
+    "finlex": "tsx src/finlex-kanteet.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.80.0",

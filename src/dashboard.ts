@@ -921,13 +921,13 @@ app.get('/', (_, res) => {
   <div class="table-wrap">
     <table>
       <thead><tr>
-        <th>Prioriteetti</th>
+        <th>Prioriteetti / Riski</th>
         <th>Maa</th>
         <th>Organisaatio</th>
+        <th>Sektori</th>
         <th>Tapaus</th>
-        <th>Tuomioistuin</th>
         <th>Pvm</th>
-        <th>Lähestyminen</th>
+        <th>Myyntikulma</th>
         <th>Status</th>
         <th>Toiminnot</th>
       </tr></thead>
@@ -1525,10 +1525,26 @@ function courtStatusBadge(status) {
   return \`<span class="badge" style="background:\${bg};color:\${color}">\${label}</span>\`
 }
 
-function courtPriority(score) {
+function courtPriority(c) {
+  const score = c.salesPriority ?? c.priorityScore
   if (score == null) return '<span style="color:#64748b">–</span>'
   const color = score >= 8 ? '#00D4AA' : score >= 5 ? '#f59e0b' : '#64748b'
-  return \`<span style="color:\${color};font-weight:700;font-size:16px">\${score}/10</span>\`
+  const risk = c.accessibilityRisk != null ? \`<br><span style="font-size:10px;color:#64748b">riski \${Math.round(c.accessibilityRisk*100)}%</span>\` : ''
+  const conf = c.confidence != null ? \`<span style="font-size:10px;color:#64748b"> · varmuus \${Math.round(c.confidence*100)}%</span>\` : ''
+  return \`<span style="color:\${color};font-weight:700;font-size:16px">\${score}/10</span>\${risk}\${conf}\`
+}
+
+function sectorBadge(sector) {
+  const map = {
+    public_authority: ['#1e3a5f','#93c5fd','🏛 Julkinen'],
+    private_company:  ['#1c2a1e','#86efac','🏢 Yritys'],
+    healthcare:       ['#2d1f3d','#c4b5fd','🏥 Terveys'],
+    education:        ['#2d2a1e','#fde68a','🎓 Koulutus'],
+    ngo:              ['#1e2d2d','#6ee7b7','🤝 Järjestö'],
+    unknown:          ['#1f1f1f','#94a3b8','❓ Tuntematon'],
+  }
+  const [bg, color, label] = map[sector] ?? map.unknown
+  return \`<span class="badge" style="background:\${bg};color:\${color};font-size:11px">\${label}</span>\`
 }
 
 function flagEmoji(country) {
@@ -1557,13 +1573,13 @@ function renderCourtLeads() {
   if (!filtered.length) { tbody.innerHTML = ''; empty.style.display = ''; return }
   empty.style.display = 'none'
   tbody.innerHTML = filtered.map(c => \`<tr>
-    <td>\${courtPriority(c.priorityScore)}</td>
-    <td style="font-size:20px">\${flagEmoji(c.country)}</td>
-    <td style="font-weight:600;color:#e2e8f0;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">\${c.orgName ?? '<span style="color:#64748b">–</span>'}</td>
+    <td>\${courtPriority(c)}</td>
+    <td style="font-size:18px">\${flagEmoji(c.country)}</td>
+    <td style="font-weight:600;color:#e2e8f0;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="\${c.orgName ?? ''}">\${c.orgName ?? '<span style="color:#64748b">–</span>'}</td>
+    <td>\${sectorBadge(c.sector)}</td>
     <td><a href="\${c.caseUrl}" target="_blank" style="color:#60a5fa;font-size:12px;text-decoration:none" title="\${c.caseTitle}">\${c.caseRef}</a></td>
-    <td style="font-size:12px;color:#94a3b8">\${c.court ?? '–'}</td>
     <td style="font-size:12px;color:#94a3b8">\${c.caseDate ? c.caseDate.slice(0,10) : '–'}</td>
-    <td style="font-size:12px;color:#cbd5e1;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="\${c.contactAngle ?? ''}">\${c.contactAngle ? c.contactAngle.slice(0,80) + (c.contactAngle.length > 80 ? '…' : '') : '–'}</td>
+    <td style="font-size:12px;color:#cbd5e1;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="\${c.suggestedAngle ?? c.contactAngle ?? ''}">\${(c.suggestedAngle || c.contactAngle || '–').slice(0,90)}</td>
     <td>\${courtStatusBadge(c.status)}</td>
     <td>
       <select style="background:#1a2744;color:#e2e8f0;border:1px solid #1e3a5f;border-radius:6px;padding:4px 8px;font-size:12px;cursor:pointer" onchange="updateCourtStatus('\${c.id}', this.value)">

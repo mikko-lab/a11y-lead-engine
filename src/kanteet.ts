@@ -14,7 +14,7 @@
 import 'dotenv/config'
 import { scrapeFinlexKanteet, FinlexTapaus } from './discovery/finlex'
 import { scrapeRechtspraakKanteet, RechtspraakTapaus } from './discovery/rechtspraak'
-import { analysoi, tallennaTiketti } from './court-ticket-agent'
+import { analysoi, tallennaTiketti, RiskRevenueMapping } from './court-ticket-agent'
 import { db } from './db/client'
 import { scanQueue } from './queue'
 
@@ -56,13 +56,21 @@ async function kasiittele<T extends FinlexTapaus | RechtspraakTapaus>(
       continue
     }
 
+    if (!tulos.wcagRelevant) {
+      console.log(`  – Ei WCAG-relevantti (${tulos.sector}) — ohitetaan`)
+      continue
+    }
+
     await tallennaTiketti({ ...tapaus, source } as any, tulos, maa)
     uusia++
 
+    const riskPct = Math.round(tulos.accessibilityRisk * 100)
+    const confPct = Math.round(tulos.confidence * 100)
     console.log(`  ✓ Tiketti luotu`)
-    console.log(`    Organisaatio:  ${tulos.orgName ?? '(ei tunnistettu)'}`)
-    console.log(`    Prioriteetti:  ${tulos.priorityScore}/10`)
-    console.log(`    Lähestyminen:  ${tulos.contactAngle}`)
+    console.log(`    Organisaatio:    ${tulos.organization ?? '(ei tunnistettu)'}`)
+    console.log(`    Sektori:         ${tulos.sector}`)
+    console.log(`    A11y-riski:      ${riskPct}%  |  Myyntiprioriteetti: ${tulos.salesPriority}/10  |  Varmuus: ${confPct}%`)
+    console.log(`    Kulma:           ${tulos.suggestedAngle?.slice(0, 100)}`)
 
     await sleep(500) // Claude rate limit
   }

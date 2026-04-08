@@ -16,13 +16,20 @@ model CourtLead {
   court         String?
   caseDate      String?
   country       String   @default("FI")
-  orgName       String?
-  orgBusinessId String?
-  orgWebsite    String?
-  priorityScore Int?
-  contactAngle  String?
-  aiSummary     String?
-  status        String   @default("NEW")  // NEW, CONTACTED, CONVERTED, IRRELEVANT
+  orgName           String?
+  orgBusinessId     String?
+  orgWebsite        String?
+  sector            String?   // public_authority | private_company | healthcare | education | ngo | unknown
+  accessibilityRisk Float?    // 0.0–1.0 todennäköisyys että org tarvitsee apua
+  salesPriority     Int?      // 0–10 myyntimahdollisuuden kiireellisyys
+  confidence        Float?    // 0.0–1.0 Clauden varmuus arviostaan
+  wcagRelevant      Boolean   @default(false)
+  suggestedAngle    String?   // myyntikulma sektorin mukaan
+  aiSummary         String?
+  // legacy — säilytetään vanhan datan takia
+  priorityScore     Int?
+  contactAngle      String?
+  status            String   @default("NEW")  // NEW, CONTACTED, CONVERTED, IRRELEVANT
   notes         String?
   createdAt     DateTime @default(now())
 }

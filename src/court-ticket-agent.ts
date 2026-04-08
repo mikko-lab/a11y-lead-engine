@@ -128,54 +128,110 @@ Return ONLY this JSON (no explanation):
   }
 }
 
-// ── Stage 2: Accessibility Classifier (säännöt, ei LLM) ──────────────────────
+// ── Stage 2: Accessibility Classifier (LLM, konservatiivinen) ────────────────
 
-function classifyAccessibility(entities: ExtractedEntities): boolean {
-  // Vaatii vähintään: mainitaan saavutettavuus JA digitaalinen palvelu
-  if (!entities.mentions_accessibility) return false
-  if (!entities.mentions_digital_service) return false
-  return true
+interface AccessibilityClassification {
+  is_accessibility_case: boolean
+  confidence: number
+  signals: string[]
 }
 
-// ── Stage 3: Commercial Reasoning (vain relevanteille) ───────────────────────
+const CLASSIFIER_SYSTEM = `You are an accessibility legal classifier.
+Evaluate if a case relates to digital accessibility (WCAG context).
+Rules:
+- WCAG mention = strong signal
+- Digital service + discrimination = medium signal
+- Pure physical accessibility = false
+- Be conservative: if unsure → return false with low confidence`
+
+async function classifyAccessibility(
+  kase: CanonicalCase,
+  entities: ExtractedEntities,
+  client: Anthropic
+): Promise<AccessibilityClassification> {
+  const input = [
+    `Title: ${kase.title}`,
+    kase.summary ? `Text: ${kase.summary.slice(0, 500)}` : '',
+    `WCAG mentioned: ${entities.mentions_wcag}`,
+    `Digital service: ${entities.mentions_digital_service}`,
+    `Accessibility mentioned: ${entities.mentions_accessibility}`,
+    `Service type: ${entities.service_type}`,
+  ].filter(Boolean).join('\n')
+
+  const prompt = `Classify this court case:
+
+${input}
+
+Return ONLY JSON:
+{
+  "is_accessibility_case": false,
+  "confidence": 0.0,
+  "signals": ["wcag_mentioned", "digital_service", "discrimination_argument", "public_service_context"]
+}
+Include only signals that actually apply. Empty array if none.`
+
+  try {
+    const msg = await client.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 150,
+      system: CLASSIFIER_SYSTEM,
+      messages: [{ role: 'user', content: prompt }],
+    })
+    const text = msg.content[0].type === 'text' ? msg.content[0].text.trim() : null
+    if (!text) return { is_accessibility_case: false, confidence: 0, signals: [] }
+    const p = JSON.parse(text.replace(/^```json?\n?/, '').replace(/\n?```$/, ''))
+    return {
+      is_accessibility_case: Boolean(p.is_accessibility_case),
+      confidence:            Math.min(1, Math.max(0, Number(p.confidence ?? 0))),
+      signals:               Array.isArray(p.signals) ? p.signals : [],
+    }
+  } catch {
+    return { is_accessibility_case: false, confidence: 0, signals: [] }
+  }
+}
+
+// ── Stage 3: Commercial Reasoning ─────────────────────────────────────────────
 
 interface CommercialReasoning {
+  target_organization: string | null
   sector: 'public_authority' | 'private_company' | 'healthcare' | 'education' | 'ngo' | 'unknown'
-  urgency: 'high' | 'medium' | 'low'
+  pain_level: number   // 0–10
+  urgency: number      // 0–10
   suggested_angle: string
-  summary: string
+  why_now: string
 }
 
-const COMMERCIAL_SYSTEM = `You are a sales intelligence agent for a digital accessibility consultancy.
-You identify commercial opportunities from legal cases. Be concise and professional.
-Sector angles:
-- public_authority: EU Directive 2016/2102, legal obligation, sanctions
-- private_company: competitive advantage, user base, ESG, reputation
-- healthcare: patient rights, duty of care
-- education: equal access, legal requirements
-- ngo: mission alignment`
+const COMMERCIAL_SYSTEM = `You are a B2B sales strategist for a digital accessibility consultancy.
+Based on a court case, determine if this creates a sales opportunity.
+Rules:
+- Focus on business impact, not legal analysis
+- Public sector = high urgency (legal obligation)
+- Court ruling = higher urgency than complaint
+- Suggested angle must be concrete (audit, remediation, compliance plan)
+- pain_level and urgency are 0–10 integers`
 
 async function reasonCommercially(
   kase: CanonicalCase,
   entities: ExtractedEntities,
+  classification: AccessibilityClassification,
   client: Anthropic
 ): Promise<CommercialReasoning | null> {
-  const lang = kase.country === 'FI' ? 'Finnish' : 'English'
-
-  const prompt = `Commercial opportunity analysis:
+  const prompt = `Sales opportunity analysis:
 
 Organization: ${entities.defendant_organization ?? 'unknown'}
 Type: ${entities.organization_type}
-WCAG mentioned: ${entities.mentions_wcag}
-Service type: ${entities.service_type}
-Case title: ${kase.title}
+Signals: ${classification.signals.join(', ') || 'none'}
+Case: ${kase.title}
+${kase.summary ? `Context: ${kase.summary.slice(0, 300)}` : ''}
 
 Return ONLY JSON:
 {
+  "target_organization": "exact name or null",
   "sector": "public_authority | private_company | healthcare | education | ngo | unknown",
-  "urgency": "high | medium | low",
-  "suggested_angle": "1-2 sentences in ${lang}. Professional, no jargon.",
-  "summary": "2-3 sentences in Finnish. What is the opportunity?"
+  "pain_level": 8,
+  "urgency": 9,
+  "suggested_angle": "Concrete 1-2 sentences. Mention audit/remediation/compliance. Match language to country (${kase.country}).",
+  "why_now": "1 sentence — specific trigger from this case"
 }`
 
   try {
@@ -190,10 +246,12 @@ Return ONLY JSON:
     const p = JSON.parse(text.replace(/^```json?\n?/, '').replace(/\n?```$/, ''))
     const validSectors = ['public_authority','private_company','healthcare','education','ngo','unknown']
     return {
-      sector:          validSectors.includes(p.sector) ? p.sector : 'unknown',
-      urgency:         ['high','medium','low'].includes(p.urgency) ? p.urgency : 'medium',
-      suggested_angle: String(p.suggested_angle ?? '').slice(0, 500),
-      summary:         String(p.summary ?? '').slice(0, 1000),
+      target_organization: p.target_organization ?? entities.defendant_organization ?? null,
+      sector:              validSectors.includes(p.sector) ? p.sector : 'unknown',
+      pain_level:          Math.min(10, Math.max(0, Math.round(Number(p.pain_level ?? 5)))),
+      urgency:             Math.min(10, Math.max(0, Math.round(Number(p.urgency ?? 5)))),
+      suggested_angle:     String(p.suggested_angle ?? '').slice(0, 500),
+      why_now:             String(p.why_now ?? '').slice(0, 300),
     }
   } catch {
     return null
@@ -203,40 +261,41 @@ Return ONLY JSON:
 // ── Stage 4: Scoring Function (deterministinen koodi) ─────────────────────────
 
 interface Scores {
-  accessibilityRisk: number  // 0.0–1.0
-  salesPriority: number      // 0–10
-  confidence: number         // 0.0–1.0
+  accessibilityRisk: number
+  salesPriority: number
+  confidence: number
   wcagRelevant: boolean
 }
 
 function calculateScore(
   entities: ExtractedEntities,
-  wcagRelevant: boolean,
+  classification: AccessibilityClassification,
   commercial: CommercialReasoning | null
 ): Scores {
-  if (!wcagRelevant) {
-    return { accessibilityRisk: 0, salesPriority: 0, confidence: 0.9, wcagRelevant: false }
+  if (!classification.is_accessibility_case) {
+    return { accessibilityRisk: 0, salesPriority: 0, confidence: classification.confidence, wcagRelevant: false }
   }
 
-  // Accessibility risk
-  let risk = 0.3
-  if (entities.mentions_wcag)            risk += 0.35
-  if (entities.mentions_digital_service) risk += 0.20
-  if (entities.service_type === 'website' || entities.service_type === 'mobile_app') risk += 0.10
+  // Accessibility risk — signaaleista
+  let risk = 0.2
+  if (classification.signals.includes('wcag_mentioned'))          risk += 0.35
+  if (classification.signals.includes('digital_service'))         risk += 0.20
+  if (classification.signals.includes('discrimination_argument'))  risk += 0.15
+  if (classification.signals.includes('public_service_context'))  risk += 0.10
+  if (entities.service_type === 'website' || entities.service_type === 'mobile_app') risk += 0.05
   risk = Math.min(1, risk)
 
-  // Sales priority
-  let priority = 3
-  if (entities.mentions_wcag)              priority += 3
-  if (entities.organization_type === 'public') priority += 2  // lakivelvoite
-  if (entities.service_type === 'website')     priority += 1
-  if (commercial?.urgency === 'high')          priority += 1
-  priority = Math.min(10, priority)
+  // Sales priority — pain + urgency LLM:ltä, normalisoidaan
+  const painNorm    = commercial ? commercial.pain_level / 10 : 0.5
+  const urgencyNorm = commercial ? commercial.urgency / 10    : 0.5
+  const rawPriority = (painNorm * 0.4 + urgencyNorm * 0.6) * 10
+  const salesPriority = Math.min(10, Math.round(rawPriority))
 
-  // Confidence — laskee jos organisaatiota ei tunnistettu
-  const confidence = entities.defendant_organization ? 0.82 : 0.45
+  // Confidence — classifier + organisaation tunnistus
+  const orgBonus = entities.defendant_organization ? 0.1 : -0.2
+  const confidence = Math.min(1, Math.max(0, classification.confidence + orgBonus))
 
-  return { accessibilityRisk: risk, salesPriority: priority, confidence, wcagRelevant: true }
+  return { accessibilityRisk: risk, salesPriority, confidence, wcagRelevant: true }
 }
 
 // ── Public interface ──────────────────────────────────────────────────────────
@@ -266,25 +325,29 @@ export async function analysoi(tapaus: Tapaus): Promise<RiskRevenueMapping | nul
   if (!entities) return null
 
   // Stage 2
-  const wcagRelevant = classifyAccessibility(entities)
+  const classification = await classifyAccessibility(kase, entities, client)
 
-  // Stage 3 — vain relevanteille
-  const commercial = wcagRelevant
-    ? await reasonCommercially(kase, entities, client)
+  // Stage 3 — vain relevanteille (säästää API-kutsuja)
+  const commercial = classification.is_accessibility_case
+    ? await reasonCommercially(kase, entities, classification, client)
     : null
 
   // Stage 4
-  const scores = calculateScore(entities, wcagRelevant, commercial)
+  const scores = calculateScore(entities, classification, commercial)
+
+  const whyNow = commercial?.why_now
+    ? `${commercial.why_now} | Signals: ${classification.signals.join(', ')}`
+    : `Signals: ${classification.signals.join(', ') || 'none'}`
 
   return {
-    organization:      entities.defendant_organization,
+    organization:      commercial?.target_organization ?? entities.defendant_organization,
     sector:            commercial?.sector ?? 'unknown',
     accessibilityRisk: scores.accessibilityRisk,
     salesPriority:     scores.salesPriority,
     confidence:        scores.confidence,
     wcagRelevant:      scores.wcagRelevant,
     suggestedAngle:    commercial?.suggested_angle ?? '',
-    aiSummary:         commercial?.summary ?? '',
+    aiSummary:         whyNow,
   }
 }
 

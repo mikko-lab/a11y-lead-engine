@@ -258,44 +258,97 @@ Return ONLY JSON:
   }
 }
 
-// ── Stage 4: Scoring Function (deterministinen koodi) ─────────────────────────
+// ── Stage 4: Scoring Function (deterministinen koodi, ei LLM) ────────────────
 
 interface Scores {
   accessibilityRisk: number
-  salesPriority: number
+  salesPriority: number    // deterministinen score
   confidence: number
   wcagRelevant: boolean
+}
+
+function isRecent(dateStr: string | null): boolean {
+  if (!dateStr) return false
+  try {
+    const d = new Date(dateStr)
+    const twelveMonthsAgo = new Date()
+    twelveMonthsAgo.setFullYear(twelveMonthsAgo.getFullYear() - 1)
+    return d > twelveMonthsAgo
+  } catch { return false }
+}
+
+function hasLegalEnforcement(signals: string[], commercial: CommercialReasoning | null): boolean {
+  // Tuomioistuinratkaisu > kantelu
+  if (signals.includes('wcag_mentioned') && commercial?.urgency && commercial.urgency >= 8) return true
+  if (signals.includes('public_service_context') && signals.includes('wcag_mentioned')) return true
+  return false
 }
 
 function calculateScore(
   entities: ExtractedEntities,
   classification: AccessibilityClassification,
-  commercial: CommercialReasoning | null
+  commercial: CommercialReasoning | null,
+  caseDate: string | null
 ): Scores {
+  // ── Guardrail 1: ei saavutettavuustapaus → hylkää ──
   if (!classification.is_accessibility_case) {
     return { accessibilityRisk: 0, salesPriority: 0, confidence: classification.confidence, wcagRelevant: false }
   }
 
-  // Accessibility risk — signaaleista
+  // ── Deterministinen scoring (ei LLM) ──
+  let score = 0
+  score += entities.organization_type === 'public' ? 3 : 0
+  score += entities.mentions_wcag                  ? 2 : 0
+  score += isRecent(caseDate)                      ? 2 : 0
+  score += hasLegalEnforcement(classification.signals, commercial) ? 2 : 0
+  score += classification.signals.includes('discrimination_argument') ? 1 : 0  // media_signal proxy
+  const salesPriority = Math.min(score, 10)
+
+  // ── Accessibility risk — signaaleista ──
   let risk = 0.2
-  if (classification.signals.includes('wcag_mentioned'))          risk += 0.35
-  if (classification.signals.includes('digital_service'))         risk += 0.20
+  if (classification.signals.includes('wcag_mentioned'))           risk += 0.35
+  if (classification.signals.includes('digital_service'))          risk += 0.20
   if (classification.signals.includes('discrimination_argument'))  risk += 0.15
-  if (classification.signals.includes('public_service_context'))  risk += 0.10
-  if (entities.service_type === 'website' || entities.service_type === 'mobile_app') risk += 0.05
+  if (classification.signals.includes('public_service_context'))   risk += 0.10
   risk = Math.min(1, risk)
 
-  // Sales priority — pain + urgency LLM:ltä, normalisoidaan
-  const painNorm    = commercial ? commercial.pain_level / 10 : 0.5
-  const urgencyNorm = commercial ? commercial.urgency / 10    : 0.5
-  const rawPriority = (painNorm * 0.4 + urgencyNorm * 0.6) * 10
-  const salesPriority = Math.min(10, Math.round(rawPriority))
-
-  // Confidence — classifier + organisaation tunnistus
+  // ── Confidence ──
   const orgBonus = entities.defendant_organization ? 0.1 : -0.2
   const confidence = Math.min(1, Math.max(0, classification.confidence + orgBonus))
 
   return { accessibilityRisk: risk, salesPriority, confidence, wcagRelevant: true }
+}
+
+// ── Anti-hallucination guardrails ─────────────────────────────────────────────
+
+interface GuardrailResult {
+  pass: boolean
+  reason?: string
+  salesPriority: number  // voi downgradettu
+}
+
+function applyGuardrails(
+  entities: ExtractedEntities,
+  classification: AccessibilityClassification,
+  scores: Scores
+): GuardrailResult {
+  // Guardrail 1: ei saavutettavuustapaus → hylkää
+  if (!classification.is_accessibility_case) {
+    return { pass: false, reason: 'not_accessibility_case', salesPriority: 0 }
+  }
+
+  // Guardrail 2: ei organisaatiota → hylkää
+  if (!entities.defendant_organization) {
+    return { pass: false, reason: 'no_organization', salesPriority: 0 }
+  }
+
+  // Guardrail 3: matala confidence → downgrade prioriteetti
+  let salesPriority = scores.salesPriority
+  if (scores.confidence < 0.4) {
+    salesPriority = Math.max(0, Math.floor(salesPriority / 2))
+  }
+
+  return { pass: true, salesPriority }
 }
 
 // ── Public interface ──────────────────────────────────────────────────────────
@@ -332,18 +385,27 @@ export async function analysoi(tapaus: Tapaus): Promise<RiskRevenueMapping | nul
     ? await reasonCommercially(kase, entities, classification, client)
     : null
 
-  // Stage 4
-  const scores = calculateScore(entities, classification, commercial)
+  // Stage 4 — deterministinen scoring
+  const scores = calculateScore(entities, classification, commercial, kase.date)
 
-  const whyNow = commercial?.why_now
-    ? `${commercial.why_now} | Signals: ${classification.signals.join(', ')}`
-    : `Signals: ${classification.signals.join(', ') || 'none'}`
+  // Guardrails — anti-hallusinaatio
+  const guardrail = applyGuardrails(entities, classification, scores)
+  if (!guardrail.pass) {
+    console.log(`  – Guardrail: ${guardrail.reason} → hylätty`)
+    return null
+  }
+
+  const whyNow = [
+    commercial?.why_now,
+    `Signals: ${classification.signals.join(', ') || 'none'}`,
+    `Score breakdown: public=${entities.organization_type === 'public' ? 3 : 0} wcag=${entities.mentions_wcag ? 2 : 0} recent=${isRecent(kase.date) ? 2 : 0}`,
+  ].filter(Boolean).join(' | ')
 
   return {
     organization:      commercial?.target_organization ?? entities.defendant_organization,
     sector:            commercial?.sector ?? 'unknown',
     accessibilityRisk: scores.accessibilityRisk,
-    salesPriority:     scores.salesPriority,
+    salesPriority:     guardrail.salesPriority,
     confidence:        scores.confidence,
     wcagRelevant:      scores.wcagRelevant,
     suggestedAngle:    commercial?.suggested_angle ?? '',

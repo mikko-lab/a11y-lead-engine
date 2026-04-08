@@ -19,7 +19,8 @@
     "enrich:emails": "tsx src/enrich-emails.ts",
     "finlex": "tsx src/finlex-kanteet.ts",
     "rechtspraak": "tsx src/rechtspraak-kanteet.ts",
-    "kanteet": "tsx src/kanteet.ts"
+    "kanteet": "tsx src/kanteet.ts",
+    "vroegsignaal": "tsx src/toegankelijkheid-leads.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.80.0",

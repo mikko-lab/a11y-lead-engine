@@ -10,7 +10,6 @@
 const BASE = 'https://data.rechtspraak.nl/uitspraken'
 
 const HAKUSANAT = [
-  'toegankelijkheid',          // saavutettavuus
   'digitale toegankelijkheid', // digitaalinen saavutettavuus
   'webtoegankelijkheid',       // web-saavutettavuus
   'WCAG',

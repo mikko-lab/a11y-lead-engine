@@ -25,8 +25,10 @@ export async function sendReport(opts: {
   senderName: string
   senderUrl: string
   benchmark?: { avg: number; total: number }
+  geoSnippetOriginal?: string | null
+  geoSnippetOptimized?: string | null
 }): Promise<void> {
-  const { to, scan, reportUrl, optOutUrl, pixelUrl, aiSummary, senderName, senderUrl, benchmark } = opts
+  const { to, scan, reportUrl, optOutUrl, pixelUrl, aiSummary, senderName, senderUrl, benchmark, geoSnippetOriginal, geoSnippetOptimized } = opts
   const transporter = createTransport()
   const domain = new URL(scan.url).hostname
   const score = scan.score
@@ -96,6 +98,20 @@ export async function sendReport(opts: {
   </a>
 
   <p style="margin: 0 0 16px; line-height: 1.6;">Suurin osa vastaavista ongelmista on korjattavissa muutamassa tunnissa. Useimmat analyysit jäävät yhteenvetotasolle — minä voin halutessanne auttaa viemään korjaukset suoraan tuotantoon asti.</p>
+
+  ${geoSnippetOriginal && geoSnippetOptimized ? `
+  <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 28px 0;">
+
+  <div style="background: #f0f9ff; border-left: 3px solid #0ea5e9; padding: 16px 20px; margin: 0 0 8px; border-radius: 0 6px 6px 0; line-height: 1.7; color: #1a1a1a;">
+    <p style="font-weight: 700; margin: 0 0 12px; font-size: 15px;">🔍 Huomasimme myös tämän:</p>
+    <p style="margin: 0 0 12px;">Tarkistimme myös, miten sivustonne näkyy AI-hakukoneissa — ja teimme esimerkin yhdestä tekstikohdasta.</p>
+    <p style="margin: 0 0 6px; font-size: 13px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: .04em;">Ennen:</p>
+    <p style="margin: 0 0 14px; padding: 10px 14px; background: #fff; border: 1px solid #e2e8f0; border-radius: 4px; font-size: 14px; color: #475569; font-style: italic;">"${geoSnippetOriginal}"</p>
+    <p style="margin: 0 0 6px; font-size: 13px; font-weight: 700; color: #0ea5e9; text-transform: uppercase; letter-spacing: .04em;">Jälkeen:</p>
+    <p style="margin: 0 0 14px; padding: 10px 14px; background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 4px; font-size: 14px; color: #1a1a1a;">"${geoSnippetOptimized}"</p>
+    <p style="margin: 0; font-size: 13px; color: #475569;">Tämän tyyppinen rakenne on se, jota ChatGPT / Gemini käyttävät vastauksissaan. Voin tehdä saman koko sivulle.</p>
+  </div>
+  ` : ''}
 
   <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 28px 0;">
 

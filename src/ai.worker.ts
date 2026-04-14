@@ -4,7 +4,7 @@ import fs from 'fs'
 import { Worker, Job } from 'bullmq'
 import { connection, AiJobData, actionQueue } from './queue'
 import { db } from './db/client'
-import { generateAiSummary } from './ai-summary'
+import { generateAiSummary, generateGeoSnippet } from './ai-summary'
 import { generatePdf } from './pdf'
 
 const REPORTS_DIR = path.join(process.cwd(), 'reports')
@@ -24,13 +24,17 @@ async function processJob(job: Job<AiJobData>) {
 
   console.log(`\n[ai] ${lead.domain.url}`)
 
-  // 1. AI-yhteenveto
+  // 1. AI-yhteenveto + GEO-snippet rinnakkain
   await job.updateProgress(30)
   const violations = JSON.parse(lead.scan.violations)
   const siteContext = lead.domain.tolName
     ?? (lead.domain.hasCta ? 'palveluyritys, jolla on ajanvaraus tai yhteydenotto' : undefined)
-  const aiSummary = await generateAiSummary(violations, lead.domain.url, siteContext)
+  const [aiSummary, geoSnippet] = await Promise.all([
+    generateAiSummary(violations, lead.domain.url, siteContext),
+    generateGeoSnippet(lead.domain.url),
+  ])
   if (aiSummary) console.log(`  AI-yhteenveto generoitu`)
+  if (geoSnippet) console.log(`  GEO-snippet generoitu`)
 
   // 2. PDF
   await job.updateProgress(70)
@@ -58,6 +62,7 @@ async function processJob(job: Job<AiJobData>) {
     where: { id: leadId },
     data: {
       ...(aiSummary && { aiSummary }),
+      ...(geoSnippet && { geoSnippetOriginal: geoSnippet.original, geoSnippetOptimized: geoSnippet.optimized }),
       pdfPath,
     },
   })

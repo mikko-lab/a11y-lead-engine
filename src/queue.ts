@@ -31,12 +31,18 @@ export interface ActionJobData {
   sendEmail: boolean
 }
 
+export interface GeoJobData {
+  siteId: string
+  pageId?: string  // jos asetettu, analysoidaan vain tämä sivu (manuaalinen tila)
+}
+
 // ── Queues ────────────────────────────────────────────────────────────────────
 
 export const scanQueue   = new Queue<ScanJobData>('scan',   { connection })
 export const enrichQueue = new Queue<EnrichJobData>('enrich', { connection })
 export const aiQueue     = new Queue<AiJobData>('ai',     { connection })
 export const actionQueue = new Queue<ActionJobData>('action', { connection })
+export const geoQueue    = new Queue<GeoJobData>('geo',    { connection })
 
 export async function addScanJob(data: ScanJobData) {
   return scanQueue.add('scan-url', data, {

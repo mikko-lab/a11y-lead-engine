@@ -20,7 +20,8 @@
     "finlex": "tsx src/finlex-kanteet.ts",
     "rechtspraak": "tsx src/rechtspraak-kanteet.ts",
     "kanteet": "tsx src/kanteet.ts",
-    "vroegsignaal": "tsx src/toegankelijkheid-leads.ts"
+    "vroegsignaal": "tsx src/toegankelijkheid-leads.ts",
+    "worker:geo": "tsx src/geo.worker.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.80.0",

@@ -34,6 +34,34 @@ model CourtLead {
   createdAt     DateTime @default(now())
 }
 
+model GeoSite {
+  id         String    @id @default(cuid())
+  url        String    @unique
+  platform   String    @default("wordpress") // wordpress | squarespace | manual | unknown
+  wpUser     String?
+  wpPassword String?
+  lastError  String?
+  createdAt  DateTime  @default(now())
+  pages      GeoPage[]
+}
+
+model GeoPage {
+  id               String   @id @default(cuid())
+  siteId           String
+  site             GeoSite  @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  wpPageId         Int?
+  title            String
+  url              String
+  originalContent  String
+  optimizedContent String?
+  geoScore         Int?
+  geoScoreAfter    Int?
+  analysis         String?  // JSON: { findings[], suggestions[] }
+  status           String   @default("PENDING") // PENDING | ANALYZED | APPROVED | REJECTED | PUBLISHED
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
 model Blocklist {
   id        String   @id @default(cuid())
   domain    String   @unique  // hostname, esim. "yle.fi"
@@ -125,5 +153,7 @@ model Lead {
   lastScannedAt       DateTime?
   convertedAt         DateTime?
   notes               String?
+  geoSnippetOriginal  String?
+  geoSnippetOptimized String?
   createdAt           DateTime  @default(now())
 }

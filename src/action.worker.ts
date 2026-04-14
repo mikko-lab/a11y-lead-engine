@@ -63,6 +63,8 @@ async function processJob(job: Job<ActionJobData>) {
     senderName: SENDER_NAME,
     senderUrl: SENDER_URL,
     benchmark,
+    geoSnippetOriginal: lead.geoSnippetOriginal,
+    geoSnippetOptimized: lead.geoSnippetOptimized,
   })
 
   await db.lead.update({

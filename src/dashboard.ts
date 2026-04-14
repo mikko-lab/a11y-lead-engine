@@ -589,7 +589,7 @@ app.get('/', (_, res) => {
 <title>A11Y Lead Engine</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: 'Segoe UI', sans-serif; background: #0f1923; color: #e2e8f0; min-height: 100vh; }
+  body { font-family: 'Segoe UI', sans-serif; background: #0f1923; color: #f1f5f9; min-height: 100vh; }
   header { background: #0A2540; border-bottom: 1px solid #1e3a5f; padding: 16px 32px; display: flex; align-items: center; gap: 16px; }
   header h1 { font-size: 18px; font-weight: 700; color: #fff; }
   header span { color: #00D4AA; font-size: 13px; font-weight: 600; margin-left: auto; }
@@ -602,7 +602,7 @@ app.get('/', (_, res) => {
   .stats { display: grid; grid-template-columns: repeat(5, 1fr); gap: 16px; padding: 24px 32px; }
   .stat { background: #1a2744; border: 1px solid #1e3a5f; border-radius: 10px; padding: 20px; }
   .stat-value { font-size: 36px; font-weight: 700; color: #00D4AA; }
-  .stat-label { font-size: 13px; color: #94a3b8; margin-top: 4px; }
+  .stat-label { font-size: 13px; color: #cbd5e1; margin-top: 4px; }
   .toolbar { padding: 0 32px 16px; display: flex; gap: 12px; align-items: center; }
   .toolbar input { flex: 1; max-width: 320px; padding: 8px 14px; border-radius: 8px; border: 1px solid #1e3a5f; background: #1a2744; color: #e2e8f0; font-size: 14px; outline: none; }
   .toolbar input:focus { border-color: #00D4AA; }
@@ -614,10 +614,10 @@ app.get('/', (_, res) => {
   .btn-ghost { background: #1e3a5f; color: #e2e8f0; }
   .btn-lg { padding: 12px 28px; font-size: 15px; }
   table { width: 100%; border-collapse: collapse; }
-  thead th { padding: 10px 16px; text-align: left; font-size: 11px; font-weight: 600; color: #94a3b8; text-transform: uppercase; letter-spacing: .05em; border-bottom: 1px solid #1e3a5f; }
+  thead th { padding: 10px 16px; text-align: left; font-size: 11px; font-weight: 700; color: #cbd5e1; text-transform: uppercase; letter-spacing: .05em; border-bottom: 1px solid #1e3a5f; }
   tbody tr { border-bottom: 1px solid #141e2e; transition: background .1s; }
   tbody tr:hover { background: #1a2744; }
-  td { padding: 12px 16px; font-size: 14px; vertical-align: middle; }
+  td { padding: 12px 16px; font-size: 14px; vertical-align: middle; color: #f1f5f9; }
   .domain { font-weight: 600; color: #e2e8f0; text-decoration: none; }
   .domain:hover { text-decoration: underline; }
   .score { font-weight: 700; font-size: 18px; }
@@ -633,19 +633,19 @@ app.get('/', (_, res) => {
   /* Uusi ajo */
   .run-wrap { padding: 24px 32px; max-width: 860px; }
   .run-section { margin-bottom: 28px; }
-  .run-section h3 { font-size: 13px; font-weight: 600; color: #94a3b8; text-transform: uppercase; letter-spacing: .06em; margin-bottom: 12px; }
+  .run-section h3 { font-size: 13px; font-weight: 600; color: #cbd5e1; text-transform: uppercase; letter-spacing: .06em; margin-bottom: 12px; }
   .source-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
   .source-card { background: #1a2744; border: 2px solid #1e3a5f; border-radius: 10px; padding: 16px 18px; cursor: pointer; transition: border-color .15s; }
   .source-card.selected { border-color: #00D4AA; }
   .source-card h4 { font-size: 14px; font-weight: 700; margin-bottom: 4px; }
-  .source-card p { font-size: 12px; color: #94a3b8; line-height: 1.5; }
+  .source-card p { font-size: 12px; color: #cbd5e1; line-height: 1.5; }
   .tol-grid { display: flex; flex-wrap: wrap; gap: 8px; }
   .tol-chip { display: flex; align-items: center; gap: 6px; background: #1a2744; border: 1px solid #1e3a5f; border-radius: 6px; padding: 6px 12px; cursor: pointer; font-size: 13px; transition: border-color .15s, background .15s; user-select: none; }
   .tol-chip.selected { background: #0d3d2e; border-color: #00D4AA; color: #00D4AA; }
   .tol-chip input { display: none; }
   .run-row { display: flex; gap: 16px; align-items: flex-end; margin-bottom: 20px; }
   .run-field { display: flex; flex-direction: column; gap: 6px; }
-  .run-field label { font-size: 12px; color: #94a3b8; font-weight: 600; }
+  .run-field label { font-size: 12px; color: #cbd5e1; font-weight: 600; }
   .run-field input[type=number] { width: 100px; padding: 8px 12px; border-radius: 8px; border: 1px solid #1e3a5f; background: #1a2744; color: #e2e8f0; font-size: 14px; outline: none; }
   .run-field input[type=number]:focus { border-color: #00D4AA; }
   .toggle-wrap { display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer; padding-bottom: 2px; }
@@ -654,11 +654,11 @@ app.get('/', (_, res) => {
   .toggle::after { content:''; position: absolute; width: 16px; height: 16px; background: #fff; border-radius: 50%; top: 3px; left: 3px; transition: left .2s; }
   .toggle.on::after { left: 21px; }
   .log-box { background: #090f18; border: 1px solid #1e3a5f; border-radius: 8px; padding: 16px; height: 280px; overflow-y: auto; font-family: 'Menlo', 'Consolas', monospace; font-size: 12px; line-height: 1.7; }
-  .log-line { color: #94a3b8; }
+  .log-line { color: #cbd5e1; }
   .log-line.info { color: #60a5fa; }
   .log-line.done { color: #00D4AA; font-weight: 700; }
   .log-line.error { color: #fb923c; }
-  .log-ts { color: #64748b; margin-right: 8px; }
+  .log-ts { color: #94a3b8; margin-right: 8px; }
   .status-dot { width: 8px; height: 8px; border-radius: 50%; background: #334155; display: inline-block; }
   .status-dot.running { background: #00D4AA; animation: pulse 1s infinite; }
   @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
@@ -672,7 +672,7 @@ app.get('/', (_, res) => {
   .modal-actions { display: flex; gap: 8px; justify-content: flex-end; }
   .toast { position: fixed; bottom: 24px; right: 24px; background: #0d3d2e; color: #5eead4; border: 1px solid #0f766e; padding: 12px 20px; border-radius: 8px; font-size: 14px; font-weight: 600; opacity: 0; transition: opacity .3s; pointer-events: none; z-index: 200; }
   .toast.show { opacity: 1; }
-  .empty { text-align: center; padding: 60px; color: #94a3b8; }
+  .empty { text-align: center; padding: 60px; color: #cbd5e1; }
   .active-filter { border: 1px solid #00D4AA !important; color: #00D4AA !important; }
 </style>
 </head>
@@ -690,6 +690,7 @@ app.get('/', (_, res) => {
   <div class="tab" onclick="switchTab('monitor')">Seuranta</div>
   <div class="tab" onclick="switchTab('blocklist')">Blocklist</div>
   <div class="tab" onclick="switchTab('kanteet')">⚖️ Kanteet</div>
+  <div class="tab" onclick="switchTab('geo')">🤖 GEO Agent</div>
 </div>
 
 <!-- LEADIT -->
@@ -937,6 +938,50 @@ app.get('/', (_, res) => {
   </div>
 </div>
 
+<!-- GEO AGENT PANEL -->
+<div class="page" id="page-geo">
+  <div style="padding:24px 32px 16px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
+    <h2 style="font-size:18px;font-weight:700;color:#e2e8f0;">🤖 GEO Agent — AI-hakukoneoptimointi</h2>
+    <button class="btn btn-primary btn-sm" onclick="document.getElementById('geo-form').style.display='block'">+ Analysoi uusi sivusto</button>
+  </div>
+
+  <!-- Lomake -->
+  <div id="geo-form" style="display:none;margin:0 32px 20px;background:#1e293b;border-radius:12px;padding:20px;max-width:520px;">
+    <h3 style="margin:0 0 16px;font-size:15px;color:#f1f5f9;">WordPress-sivuston analyysi</h3>
+    <div style="display:flex;flex-direction:column;gap:10px;">
+      <input id="geo-url" placeholder="https://asiakkaasi.fi" style="background:#0f172a;color:#f1f5f9;border:1px solid #334155;border-radius:6px;padding:10px 12px;font-size:14px;">
+      <input id="geo-user" placeholder="WP-käyttäjätunnus" style="background:#0f172a;color:#f1f5f9;border:1px solid #334155;border-radius:6px;padding:10px 12px;font-size:14px;">
+      <input id="geo-pass" type="password" placeholder="Application Password" style="background:#0f172a;color:#f1f5f9;border:1px solid #334155;border-radius:6px;padding:10px 12px;font-size:14px;">
+      <div style="display:flex;gap:8px;margin-top:4px;">
+        <button class="btn btn-primary btn-sm" onclick="startGeoAnalysis()">Käynnistä analyysi</button>
+        <button class="btn btn-ghost btn-sm" onclick="document.getElementById('geo-form').style.display='none'">Peruuta</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tulokset -->
+  <div id="geo-sites" style="padding:0 32px 32px;"></div>
+  <div class="empty" id="geo-empty" style="display:none;padding:48px 32px;">Ei analysoituja sivustoja. Lisää ensimmäinen yllä olevalla lomakkeella.</div>
+</div>
+
+<!-- GEO MANUAL MODAL -->
+<div id="geo-manual-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:1000;align-items:flex-start;justify-content:center;padding-top:60px;overflow-y:auto;">
+  <div style="background:#1e293b;border-radius:12px;padding:24px;width:600px;max-width:95vw;margin-bottom:40px;">
+    <h3 style="margin:0 0 4px;color:#f1f5f9;">Manuaalinen GEO-analyysi</h3>
+    <p style="margin:0 0 16px;font-size:13px;color:#94a3b8;">Kopioi sivun teksti alla olevaan kenttään. Claude analysoi ja optimoi sen GEO-periaatteilla.</p>
+    <input type="hidden" id="geo-manual-site-id">
+    <div style="display:flex;flex-direction:column;gap:10px;">
+      <input id="geo-manual-title" placeholder="Sivun otsikko" style="background:#0f172a;color:#f1f5f9;border:1px solid #334155;border-radius:6px;padding:10px 12px;font-size:14px;">
+      <input id="geo-manual-url" placeholder="Sivun URL (valinnainen)" style="background:#0f172a;color:#f1f5f9;border:1px solid #334155;border-radius:6px;padding:10px 12px;font-size:14px;">
+      <textarea id="geo-manual-content" rows="10" placeholder="Liitä sivun tekstisisältö tähän..." style="background:#0f172a;color:#f1f5f9;border:1px solid #334155;border-radius:6px;padding:10px 12px;font-size:13px;resize:vertical;box-sizing:border-box;width:100%;"></textarea>
+    </div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;">
+      <button class="btn btn-ghost btn-sm" onclick="closeGeoManual()">Peruuta</button>
+      <button class="btn btn-primary btn-sm" onclick="submitGeoManual()">Analysoi →</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <!-- MUISTIINPANOT MODAL -->
@@ -971,12 +1016,13 @@ const YR_CATEGORIES = [${YR_CATEGORIES}]
 
 // ── Tabs ──────────────────────────────────────────────────────────────────────
 function switchTab(tab) {
-  document.querySelectorAll('.tab').forEach((t, i) => t.classList.toggle('active', ['leads','run','manual','monitor','blocklist','kanteet'][i] === tab))
+  document.querySelectorAll('.tab').forEach((t, i) => t.classList.toggle('active', ['leads','run','manual','monitor','blocklist','kanteet','geo'][i] === tab))
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'))
   document.getElementById('page-' + tab).classList.add('active')
   if (tab === 'monitor') loadMonitorDomains()
   if (tab === 'blocklist') loadBlocklist()
   if (tab === 'kanteet') loadCourtLeads()
+  if (tab === 'geo') loadGeoSites()
 }
 
 // ── Stats & Leads ─────────────────────────────────────────────────────────────
@@ -1597,9 +1643,277 @@ initRunPage()
 document.getElementById('email-toggle').classList.toggle('on', sendEmailOn)
 load()
 setInterval(load, 30000)
+
+// ── GEO Agent ─────────────────────────────────────────────────────────────────
+async function startGeoAnalysis() {
+  const url  = document.getElementById('geo-url').value.trim()
+  const user = document.getElementById('geo-user').value.trim()
+  const pass = document.getElementById('geo-pass').value.trim()
+  if (!url) return showToast('Syötä sivuston URL')
+
+  const res = await fetch('/api/geo/analyze', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ url, wpUser: user, wpPassword: pass }),
+  })
+  if (!res.ok) { showToast('Virhe: ' + (await res.json()).error); return }
+
+  document.getElementById('geo-form').style.display = 'none'
+  document.getElementById('geo-url').value = ''
+  document.getElementById('geo-user').value = ''
+  document.getElementById('geo-pass').value = ''
+  showToast('Analyysi käynnistetty — tulokset näkyvät muutaman minuutin kuluttua')
+  setTimeout(loadGeoSites, 3000)
+}
+
+function geoStatusBadge(status) {
+  const map = {
+    PENDING:   ['#475569','Odottaa'],
+    ANALYZED:  ['#2563eb','Analysoitu'],
+    APPROVED:  ['#16a34a','Hyväksytty'],
+    REJECTED:  ['#dc2626','Hylätty'],
+    PUBLISHED: ['#7c3aed','Julkaistu'],
+  }
+  const [color, label] = map[status] ?? ['#475569', status]
+  return \`<span style="background:\${color};color:#fff;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700;">\${label}</span>\`
+}
+
+function geoScoreBadge(score, after) {
+  if (score == null) return '<span style="color:#64748b;">—</span>'
+  const color = score < 40 ? '#f87171' : score < 65 ? '#fbbf24' : '#4ade80'
+  const afterColor = after != null && after >= 65 ? '#4ade80' : '#fbbf24'
+  const afterPart = after != null
+    ? \` <span style="color:#94a3b8;font-weight:400;">→</span> <strong style="color:\${afterColor}">\${after}</strong>\`
+    : ''
+  return \`<span style="color:\${color};font-weight:700;font-size:15px;">\${score}</span>\${afterPart}\`
+}
+
+async function geoApprove(id) {
+  await fetch(\`/api/geo/pages/\${id}\`, { method: 'PATCH', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ status: 'APPROVED' }) })
+  loadGeoSites()
+}
+
+async function geoReject(id) {
+  await fetch(\`/api/geo/pages/\${id}\`, { method: 'PATCH', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ status: 'REJECTED' }) })
+  loadGeoSites()
+}
+
+async function geoPublish(id) {
+  if (!confirm('Julkaistaan optimoitu sisältö WordPressiin?')) return
+  const res = await fetch(\`/api/geo/pages/\${id}/publish\`, { method: 'POST' })
+  if (res.ok) { showToast('Julkaistu WordPressiin!'); loadGeoSites() }
+  else { const e = await res.json(); showToast('Virhe: ' + e.error) }
+}
+
+function geoPageRow(page) {
+  const findings = page.analysis ? JSON.parse(page.analysis).findings ?? [] : []
+  const findingsHtml = findings.length
+    ? \`<ul style="margin:6px 0 0;padding-left:16px;font-size:12px;color:#cbd5e1;line-height:1.6;">\${findings.map(f => \`<li>\${escHtml(f)}</li>\`).join('')}</ul>\`
+    : ''
+  const actions = page.status === 'ANALYZED'
+    ? \`<button class="btn btn-primary btn-sm" onclick="geoApprove('\${page.id}')">Hyväksy</button>
+       <button class="btn btn-ghost btn-sm" onclick="geoReject('\${page.id}')">Hylkää</button>\`
+    : page.status === 'APPROVED'
+    ? \`<button class="btn btn-primary btn-sm" onclick="geoPublish('\${page.id}')">Julkaise WP:hen</button>\`
+    : ''
+  return \`<tr>
+    <td style="max-width:220px;"><a href="\${escHtml(page.url)}" target="_blank" style="color:#7dd3fc;font-weight:600;text-decoration:none;" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'">\${escHtml(page.title)}</a></td>
+    <td>\${geoScoreBadge(page.geoScore, page.geoScoreAfter)}</td>
+    <td>\${geoStatusBadge(page.status)}\${findingsHtml}</td>
+    <td style="white-space:nowrap;">\${actions}</td>
+  </tr>\`
+}
+
+async function loadGeoSites() {
+  const sites = await fetch('/api/geo/sites').then(r => r.json())
+  const container = document.getElementById('geo-sites')
+  const empty = document.getElementById('geo-empty')
+
+  if (!sites.length) { container.innerHTML = ''; empty.style.display = ''; return }
+  empty.style.display = 'none'
+
+  container.innerHTML = sites.map(site => {
+    const pendingCount = site.pages.filter(p => p.status === 'ANALYZED').length
+    return \`<div style="background:#1e293b;border-radius:12px;margin-bottom:20px;overflow:hidden;">
+      <div style="padding:16px 20px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #334155;">
+        <div>
+          <a href="\${escHtml(site.url)}" target="_blank" style="color:#60a5fa;font-weight:700;">\${escHtml(site.url)}</a>
+          <span style="margin-left:12px;font-size:12px;color:#94a3b8;">\${site.pages.length} sivua\${pendingCount ? \` · <strong style="color:#fbbf24;background:rgba(251,191,36,0.12);padding:1px 6px;border-radius:4px;">\${pendingCount} odottaa hyväksyntää</strong>\` : ''}</span>
+        </div>
+        <button class="btn btn-ghost btn-sm" onclick="refreshGeoSite('\${site.id}')">↻ Päivitä</button>
+      </div>
+      \${site.lastError
+        ? \`<div style="padding:16px 20px;background:rgba(220,38,38,0.08);border-top:1px solid rgba(220,38,38,0.2);">
+            <p style="color:#fca5a5;font-size:13px;margin:0 0 4px;">⚠️ \${escHtml(site.lastError)}</p>
+            \${site.platform === 'squarespace' || site.platform === 'unknown'
+              ? \`<button class="btn btn-primary btn-sm" style="margin-top:8px;" onclick="showGeoManual('\${site.id}')">Syötä sisältö käsin (copy-paste)</button>\`
+              : ''}
+          </div>\`
+        : site.pages.length
+        ? \`<table style="width:100%;border-collapse:collapse;">
+            <thead><tr style="font-size:12px;color:#64748b;border-bottom:1px solid #334155;">
+              <th style="padding:10px 20px;text-align:left;font-size:11px;font-weight:700;color:#cbd5e1;text-transform:uppercase;letter-spacing:.05em;">Sivu</th>
+              <th style="padding:10px;text-align:left;font-size:11px;font-weight:700;color:#cbd5e1;text-transform:uppercase;letter-spacing:.05em;">GEO-pisteet</th>
+              <th style="padding:10px;text-align:left;font-size:11px;font-weight:700;color:#cbd5e1;text-transform:uppercase;letter-spacing:.05em;">Status / Havainnot</th>
+              <th style="padding:10px;text-align:left;font-size:11px;font-weight:700;color:#cbd5e1;text-transform:uppercase;letter-spacing:.05em;">Toiminnot</th>
+            </tr></thead>
+            <tbody>\${site.pages.map(geoPageRow).join('')}</tbody>
+          </table>\`
+        : \`<p style="padding:20px;color:#64748b;font-size:13px;">Analysointi käynnissä — päivitä sivu hetken kuluttua.</p>\`}
+    </div>\`
+  }).join('')
+}
+
+function showGeoManual(siteId) {
+  document.getElementById('geo-manual-site-id').value = siteId
+  document.getElementById('geo-manual-title').value = ''
+  document.getElementById('geo-manual-url').value = ''
+  document.getElementById('geo-manual-content').value = ''
+  const modal = document.getElementById('geo-manual-modal')
+  modal.style.display = 'flex'
+}
+
+function closeGeoManual() {
+  document.getElementById('geo-manual-modal').style.display = 'none'
+}
+
+async function submitGeoManual() {
+  const siteId  = document.getElementById('geo-manual-site-id').value
+  const title   = document.getElementById('geo-manual-title').value.trim()
+  const url     = document.getElementById('geo-manual-url').value.trim()
+  const content = document.getElementById('geo-manual-content').value.trim()
+  if (!title || !content) { showToast('Otsikko ja sisältö vaaditaan'); return }
+
+  const res = await fetch('/api/geo/manual', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ siteId, title, url, content }),
+  })
+  if (!res.ok) { showToast('Virhe: ' + (await res.json()).error); return }
+
+  closeGeoManual()
+  showToast('Analyysi käynnistetty — tulokset näkyvät hetken kuluttua')
+  setTimeout(loadGeoSites, 4000)
+}
+
+async function refreshGeoSite(siteId) {
+  const sites = await fetch('/api/geo/sites').then(r => r.json())
+  const site = sites.find(s => s.id === siteId)
+  if (!site) return
+  await fetch('/api/geo/analyze', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ url: site.url, wpUser: site.wpUser, wpPassword: site.wpPassword }),
+  })
+  showToast('Uudelleenanalyysi käynnistetty')
+  setTimeout(loadGeoSites, 3000)
+}
 </script>
 </body>
 </html>`)
+})
+
+// ── GEO Agent API ─────────────────────────────────────────────────────────────
+
+import { geoQueue } from './queue'
+
+// Luo tai hae GeoSite, käynnistä analyysi
+app.post('/api/geo/analyze', async (req, res) => {
+  const { url, wpUser, wpPassword } = req.body
+  if (!url) return res.status(400).json({ error: 'url puuttuu' })
+
+  let normalized = url.trim()
+  if (!/^https?:\/\//i.test(normalized)) normalized = 'https://' + normalized
+
+  if (!isSafeUrl(normalized)) return res.status(400).json({ error: 'Ei sallittu URL' })
+
+  const site = await db.geoSite.upsert({
+    where: { url: normalized },
+    create: { url: normalized, wpUser: wpUser ?? '', wpPassword: wpPassword ?? '' },
+    update: { wpUser: wpUser ?? '', wpPassword: wpPassword ?? '' },
+  })
+
+  await geoQueue.add('geo-analyze', { siteId: site.id }, {
+    attempts: 2,
+    backoff: { type: 'exponential', delay: 5000 },
+  })
+
+  res.json({ ok: true, siteId: site.id })
+})
+
+// Hae sivuston analyysitulokset
+app.get('/api/geo/sites', async (_, res) => {
+  const sites = await db.geoSite.findMany({
+    orderBy: { createdAt: 'desc' },
+    include: { pages: { orderBy: { createdAt: 'desc' } } },
+  })
+  res.json(sites)
+})
+
+// Päivitä sivun status (APPROVED / REJECTED)
+app.patch('/api/geo/pages/:id', async (req, res) => {
+  const { status } = req.body
+  if (!['APPROVED', 'REJECTED'].includes(status)) return res.status(400).json({ error: 'Virheellinen status' })
+  await db.geoPage.update({ where: { id: req.params.id }, data: { status } })
+  res.json({ ok: true })
+})
+
+// Manuaalinen copy-paste analyysi (Squarespace ym.)
+app.post('/api/geo/manual', async (req, res) => {
+  const { siteId, title, url, content } = req.body
+  if (!siteId || !title || !content) return res.status(400).json({ error: 'siteId, title ja content vaaditaan' })
+
+  const site = await db.geoSite.findUnique({ where: { id: siteId } })
+  if (!site) return res.status(404).json({ error: 'Sivustoa ei löydy' })
+
+  // Luo sivu PENDING-tilaan ja lisää geo-jono käsittelemään se
+  const page = await db.geoPage.create({
+    data: {
+      siteId,
+      title,
+      url: url || site.url,
+      originalContent: content,
+      status: 'PENDING',
+    },
+  })
+
+  // Analysoi suoraan ilman WP-hakua
+  const { geoQueue: q } = await import('./queue')
+  await q.add('geo-manual', { siteId, pageId: page.id } as any, { attempts: 2 })
+
+  res.json({ ok: true, pageId: page.id })
+})
+
+// Julkaise hyväksytty sivu takaisin WordPressiin
+app.post('/api/geo/pages/:id/publish', async (req, res) => {
+  const page = await db.geoPage.findUnique({
+    where: { id: req.params.id },
+    include: { site: true },
+  })
+  if (!page) return res.status(404).json({ error: 'Sivua ei löydy' })
+  if (!page.wpPageId) return res.status(400).json({ error: 'Ei WordPress-sivua' })
+  if (!page.optimizedContent) return res.status(400).json({ error: 'Ei optimoitua sisältöä' })
+
+  let baseUrl = page.site.url.replace(/\/$/, '')
+  if (!/^https?:\/\//i.test(baseUrl)) baseUrl = 'https://' + baseUrl
+
+  const token = Buffer.from(`${page.site.wpUser}:${page.site.wpPassword}`).toString('base64')
+  const wpRes = await fetch(`${baseUrl}/wp-json/wp/v2/pages/${page.wpPageId}`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Basic ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ content: page.optimizedContent }),
+  })
+
+  if (!wpRes.ok) {
+    const err = await wpRes.text()
+    return res.status(500).json({ error: `WP-virhe: ${err.slice(0, 200)}` })
+  }
+
+  await db.geoPage.update({ where: { id: page.id }, data: { status: 'PUBLISHED' } })
+  res.json({ ok: true })
 })
 
 // ── Start ─────────────────────────────────────────────────────────────────────

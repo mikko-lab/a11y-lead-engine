@@ -25,7 +25,8 @@ async function processJob(job: Job<ActionJobData>) {
   }
 
   await job.updateProgress(30)
-  const violations = JSON.parse(lead.scan.violations)
+  let violations: any[] = []
+  try { violations = JSON.parse(lead.scan.violations) } catch { violations = [] }
   const scan = {
     url: lead.domain.url,
     score: lead.scan.score,
@@ -37,7 +38,7 @@ async function processJob(job: Job<ActionJobData>) {
     violations,
     timestamp: lead.scan.scannedAt.toISOString(),
     pagesScanned: lead.scan.pagesScanned,
-    pageBreakdown: lead.scan.pageBreakdown ? JSON.parse(lead.scan.pageBreakdown) : [],
+    pageBreakdown: lead.scan.pageBreakdown ? (() => { try { return JSON.parse(lead.scan.pageBreakdown!) } catch { return [] } })() : [],
     smallTouchTargets: 0,
     focusOutlineIssues: 0,
   }

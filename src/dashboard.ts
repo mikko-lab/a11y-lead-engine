@@ -27,12 +27,9 @@ const SENDER_NAME = process.env.SENDER_NAME ?? 'WP Saavutettavuus'
 const SENDER_URL  = process.env.SENDER_URL  ?? 'https://wpsaavutettavuus.fi'
 const REPORTS_DIR = path.join(process.cwd(), 'reports')
 
-// Poistaa vaaralliset HTML-rakenteet (script-tagit, event handlerit, javascript:-URLt)
+// Poistaa kaikki HTML-tagit — aiSummary on AI-generoitua tekstiä, ei tarvita HTML:ää
 function sanitizeHtml(html: string): string {
-  return html
-    .replace(/<script[\s\S]*?<\/script>/gi, '')
-    .replace(/\bon\w+\s*=\s*["'][^"']*["']/gi, '')
-    .replace(/javascript\s*:/gi, '')
+  return html.replace(/<[^>]*>/g, '')
 }
 
 // Estää SSRF — hylkää sisäverkko-osoitteet ja ei-http-protokollat
@@ -223,8 +220,12 @@ app.post('/api/leads/:id/send', async (req, res) => {
     moderate: lead.scan.moderate,
     minor: lead.scan.minor,
     passed: lead.scan.passed,
-    violations: JSON.parse(lead.scan.violations),
+    violations: (() => { try { return JSON.parse(lead.scan.violations) } catch { return [] } })(),
     timestamp: lead.scan.scannedAt.toISOString(),
+    pagesScanned: lead.scan.pagesScanned ?? 1,
+    pageBreakdown: lead.scan.pageBreakdown ? (() => { try { return JSON.parse(lead.scan.pageBreakdown!) } catch { return [] } })() : [],
+    smallTouchTargets: 0,
+    focusOutlineIssues: 0,
   }
 
   const pdf = lead.pdfPath && fs.existsSync(lead.pdfPath)
@@ -267,8 +268,12 @@ app.get('/api/leads/:id/pdf', async (req, res) => {
     moderate: lead.scan.moderate,
     minor: lead.scan.minor,
     passed: lead.scan.passed,
-    violations: JSON.parse(lead.scan.violations),
+    violations: (() => { try { return JSON.parse(lead.scan.violations) } catch { return [] } })(),
     timestamp: lead.scan.scannedAt.toISOString(),
+    pagesScanned: lead.scan.pagesScanned ?? 1,
+    pageBreakdown: lead.scan.pageBreakdown ? (() => { try { return JSON.parse(lead.scan.pageBreakdown!) } catch { return [] } })() : [],
+    smallTouchTargets: 0,
+    focusOutlineIssues: 0,
   }
   const pdf = generatePdf(scan, SENDER_NAME, SENDER_URL)
   res.setHeader('Content-Type', 'application/pdf')
@@ -374,6 +379,13 @@ app.get('/pixel/:token', async (req, res) => {
   }
 })
 
+const OPT_OUT_LOG = path.join(process.cwd(), 'opt-out-log.jsonl')
+
+function logOptOut(domain: string, ip: string) {
+  const entry = JSON.stringify({ ts: new Date().toISOString(), domain, ip }) + '\n'
+  fs.appendFile(OPT_OUT_LOG, entry, () => {})
+}
+
 // ── Opt-out (ei autentikaatiota) ──────────────────────────────────────────────
 app.get('/opt-out/:token', async (req, res) => {
   const lead = await db.lead.findUnique({
@@ -381,6 +393,9 @@ app.get('/opt-out/:token', async (req, res) => {
     include: { domain: true },
   })
   if (!lead) return res.status(404).send('Linkkiä ei löydy.')
+
+  const ip = (req.headers['x-forwarded-for'] as string | undefined)?.split(',')[0].trim() ?? req.socket.remoteAddress ?? 'unknown'
+  logOptOut(lead.domain.url, ip)
 
   await db.domain.update({
     where: { id: lead.domainId },
@@ -433,10 +448,10 @@ app.get('/r/:token', async (req, res) => {
     moderate: lead.scan.moderate,
     minor: lead.scan.minor,
     passed: lead.scan.passed,
-    violations: JSON.parse(lead.scan.violations) as Array<{id:string,impact:string|null,help:string,wcag:string,element:string|null,contrastRatio?:number,expectedContrastRatio?:string,pageUrl?:string}>,
+    violations: (() => { try { return JSON.parse(lead.scan.violations) as Array<{id:string,impact:string|null,help:string,wcag:string,element:string|null,contrastRatio?:number,expectedContrastRatio?:string,pageUrl?:string}> } catch { return [] } })(),
     timestamp: lead.scan.scannedAt.toISOString(),
     pagesScanned: lead.scan.pagesScanned ?? 1,
-    pageBreakdown: lead.scan.pageBreakdown ? JSON.parse(lead.scan.pageBreakdown) : [],
+    pageBreakdown: lead.scan.pageBreakdown ? (() => { try { return JSON.parse(lead.scan.pageBreakdown!) } catch { return [] } })() : [],
   }
 
   const domain = new URL(scan.url).hostname
@@ -941,8 +956,14 @@ app.get('/', (_, res) => {
 <!-- GEO AGENT PANEL -->
 <div class="page" id="page-geo">
   <div style="padding:24px 32px 16px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
-    <h2 style="font-size:18px;font-weight:700;color:#e2e8f0;">🤖 GEO Agent — AI-hakukoneoptimointi</h2>
-    <button class="btn btn-primary btn-sm" onclick="document.getElementById('geo-form').style.display='block'">+ Analysoi uusi sivusto</button>
+    <div style="display:flex;align-items:center;gap:12px;">
+      <h2 style="font-size:18px;font-weight:700;color:#e2e8f0;">🤖 GEO Agent — AI-hakukoneoptimointi</h2>
+      <span id="geo-site-count" style="font-size:13px;color:#64748b;"></span>
+    </div>
+    <div style="display:flex;gap:8px;">
+      <button class="btn btn-ghost btn-sm" onclick="showGeoManualGlobal()">+ Lisää sivu käsin</button>
+      <button class="btn btn-primary btn-sm" onclick="document.getElementById('geo-form').style.display='block'">+ Analysoi uusi sivusto</button>
+    </div>
   </div>
 
   <!-- Lomake -->
@@ -951,7 +972,7 @@ app.get('/', (_, res) => {
     <div style="display:flex;flex-direction:column;gap:10px;">
       <input id="geo-url" placeholder="https://asiakkaasi.fi" style="background:#0f172a;color:#f1f5f9;border:1px solid #334155;border-radius:6px;padding:10px 12px;font-size:14px;">
       <input id="geo-user" placeholder="WP-käyttäjätunnus" style="background:#0f172a;color:#f1f5f9;border:1px solid #334155;border-radius:6px;padding:10px 12px;font-size:14px;">
-      <input id="geo-pass" type="password" placeholder="Application Password" style="background:#0f172a;color:#f1f5f9;border:1px solid #334155;border-radius:6px;padding:10px 12px;font-size:14px;">
+      <input id="geo-pass" type="password" placeholder="Application Password" autocomplete="new-password" style="background:#0f172a;color:#f1f5f9;border:1px solid #334155;border-radius:6px;padding:10px 12px;font-size:14px;">
       <div style="display:flex;gap:8px;margin-top:4px;">
         <button class="btn btn-primary btn-sm" onclick="startGeoAnalysis()">Käynnistä analyysi</button>
         <button class="btn btn-ghost btn-sm" onclick="document.getElementById('geo-form').style.display='none'">Peruuta</button>
@@ -1685,7 +1706,10 @@ function geoScoreBadge(score, after) {
   const afterPart = after != null
     ? \` <span style="color:#94a3b8;font-weight:400;">→</span> <strong style="color:\${afterColor}">\${after}</strong>\`
     : ''
-  return \`<span style="color:\${color};font-weight:700;font-size:15px;">\${score}</span>\${afterPart}\`
+  const bar = after != null
+    ? \`<div style="margin-top:5px;height:4px;background:#0f172a;border-radius:2px;width:72px;"><div style="height:4px;border-radius:2px;background:\${afterColor};width:\${Math.min(after,100)}%;"></div></div>\`
+    : ''
+  return \`<div><span style="color:\${color};font-weight:700;font-size:15px;">\${score}</span>\${afterPart}\${bar}</div>\`
 }
 
 async function geoApprove(id) {
@@ -1693,8 +1717,131 @@ async function geoApprove(id) {
   loadGeoSites()
 }
 
+async function copyGeoText(btn, pageId, field) {
+  const el = document.getElementById(\`geo-text-\${field}-\${pageId}\`)
+  if (!el) return
+  try {
+    await navigator.clipboard.writeText(el.innerText)
+    const orig = btn.textContent
+    btn.textContent = 'Kopioitu!'
+    btn.style.color = '#4ade80'
+    setTimeout(() => { btn.textContent = orig; btn.style.color = '' }, 1500)
+  } catch {}
+}
+
 async function geoReject(id) {
   await fetch(\`/api/geo/pages/\${id}\`, { method: 'PATCH', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ status: 'REJECTED' }) })
+  loadGeoSites()
+}
+
+function diffWords(a, b) {
+  const wa = a.split(/\s+/).filter(Boolean)
+  const wb = b.split(/\s+/).filter(Boolean)
+  const m = wa.length, n = wb.length
+  const dp = Array.from({length: m+1}, () => new Array(n+1).fill(0))
+  for (let i = 1; i <= m; i++)
+    for (let j = 1; j <= n; j++)
+      dp[i][j] = wa[i-1] === wb[j-1] ? dp[i-1][j-1]+1 : Math.max(dp[i-1][j], dp[i][j-1])
+  const ops = []
+  let i = m, j = n
+  while (i > 0 || j > 0) {
+    if (i > 0 && j > 0 && wa[i-1] === wb[j-1]) { ops.unshift(['=', wa[i-1]]); i--; j-- }
+    else if (j > 0 && (i === 0 || dp[i][j-1] >= dp[i-1][j])) { ops.unshift(['+', wb[j-1]]); j-- }
+    else { ops.unshift(['-', wa[i-1]]); i-- }
+  }
+  return ops
+}
+
+function renderDiff(oldText, newText) {
+  const ops = diffWords(oldText, newText)
+  return ops.map(function(op) {
+    const w = op[1].replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    if (op[0] === '+') return '<mark style="background:rgba(74,222,128,0.15);color:#4ade80;border-radius:2px;padding:0 1px;">' + w + '</mark>'
+    if (op[0] === '-') return '<del style="background:rgba(248,113,113,0.15);color:#f87171;text-decoration:line-through;opacity:.7;">' + w + '</del>'
+    return w
+  }).join(' ')
+}
+
+function showGeoDiff(pageId) {
+  const before = document.getElementById('geo-text-before-' + pageId)
+  const after = document.getElementById('geo-text-after-' + pageId)
+  const diffEl = document.getElementById('geo-diff-' + pageId)
+  const wrap = document.getElementById('geo-panels-' + pageId)
+  if (!before || !after || !diffEl || !wrap) return
+  const isShowing = diffEl.style.display !== 'none'
+  if (isShowing) {
+    diffEl.style.display = 'none'
+    wrap.style.display = 'grid'
+  } else {
+    diffEl.innerHTML = renderDiff(before.innerText, after.innerText)
+    diffEl.style.display = 'block'
+    wrap.style.display = 'none'
+  }
+  const btn = document.getElementById('geo-diff-btn-' + pageId)
+  if (btn) btn.textContent = isShowing ? 'Näytä muutokset' : 'Rinnakkain'
+}
+
+function startGeoEdit(pageId) {
+  const display = document.getElementById('geo-text-after-' + pageId)
+  if (!display || display.tagName === 'TEXTAREA') return
+  const ta = document.createElement('textarea')
+  ta.id = 'geo-text-after-' + pageId
+  ta.value = display.innerText
+  ta.style.cssText = 'width:100%;height:180px;background:#0f172a;color:#86efac;border:1px solid #166534;border-radius:6px;padding:10px 12px;font-size:12px;line-height:1.6;resize:vertical;box-sizing:border-box;'
+  display.replaceWith(ta)
+  const btn = document.getElementById('geo-edit-btn-' + pageId)
+  if (btn) { btn.textContent = 'Tallenna'; btn.onclick = function() { saveGeoEdit(pageId) } }
+}
+
+async function saveGeoEdit(pageId) {
+  const ta = document.getElementById('geo-text-after-' + pageId)
+  if (!ta) return
+  const content = ta.value
+  const res = await fetch('/api/geo/pages/' + pageId, {
+    method: 'PATCH',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ optimizedContent: content })
+  })
+  if (res.ok) showToast('Tallennettu')
+  else showToast('Tallennusvirhe')
+  loadGeoSites()
+}
+
+function toggleGeoText(btn, elId) {
+  const el = document.getElementById(elId)
+  if (!el) return
+  if (el.style.height === 'auto') {
+    el.style.height = '80px'
+    btn.textContent = 'Näytä lisää'
+  } else {
+    el.style.height = 'auto'
+    btn.textContent = 'Näytä vähemmän'
+  }
+}
+
+function showGeoManualGlobal() {
+  const sites = document.querySelectorAll('[data-geo-site-id]')
+  if (sites.length === 0) {
+    showToast('Lisää ensin sivusto')
+  } else if (sites.length === 1) {
+    showGeoManual(sites[0].dataset.geoSiteId)
+  } else {
+    const opts = [...sites].map(s => s.dataset.geoSiteUrl).join(', ')
+    const url = prompt('Useita sivustoja: ' + opts + '. Anna sivuston URL:')
+    if (!url) return
+    const match = [...sites].find(s => s.dataset.geoSiteUrl === url)
+    if (match) showGeoManual(match.dataset.geoSiteId)
+    else showToast('Sivustoa ei löydy')
+  }
+}
+
+async function geoApproveSelected(siteId) {
+  const boxes = document.querySelectorAll(\`.geo-page-select[data-site-id="\${siteId}"]:checked\`)
+  const ids = [...boxes].map(c => c.dataset.pageId)
+  if (!ids.length) { showToast('Valitse ensin sivuja'); return }
+  await Promise.all(ids.map(id =>
+    fetch(\`/api/geo/pages/\${id}\`, { method: 'PATCH', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ status: 'APPROVED' }) })
+  ))
   loadGeoSites()
 }
 
@@ -1706,22 +1853,89 @@ async function geoPublish(id) {
 }
 
 function geoPageRow(page) {
-  const findings = page.analysis ? JSON.parse(page.analysis).findings ?? [] : []
+  const analysis = page.analysis ? JSON.parse(page.analysis) : {}
+  const findings = analysis.findings ?? []
+  const citations = analysis.citations ?? []
   const findingsHtml = findings.length
-    ? \`<ul style="margin:6px 0 0;padding-left:16px;font-size:12px;color:#cbd5e1;line-height:1.6;">\${findings.map(f => \`<li>\${escHtml(f)}</li>\`).join('')}</ul>\`
+    ? \`<ul style="margin:8px 0 0;padding-left:18px;font-size:13px;color:#cbd5e1;line-height:1.8;">\${findings.map(f => \`<li>\${escHtml(f)}</li>\`).join('')}</ul>\`
     : ''
-  const actions = page.status === 'ANALYZED'
-    ? \`<button class="btn btn-primary btn-sm" onclick="geoApprove('\${page.id}')">Hyväksy</button>
-       <button class="btn btn-ghost btn-sm" onclick="geoReject('\${page.id}')">Hylkää</button>\`
+  const citationsHtml = citations.length
+    ? \`<div style="margin-top:8px;display:flex;align-items:flex-start;gap:6px;"><span style="font-size:11px;color:#94a3b8;font-weight:700;text-transform:uppercase;letter-spacing:.05em;white-space:nowrap;padding-top:1px;">Lähteet</span><span style="font-size:11px;color:#94a3b8;">\${citations.map(c => escHtml(c)).join(' · ')}</span></div>\`
+    : ''
+
+  const scoreColor = page.geoScore < 40 ? '#f87171' : page.geoScore < 65 ? '#fbbf24' : '#4ade80'
+  const afterColor = page.geoScoreAfter != null && page.geoScoreAfter >= 65 ? '#4ade80' : '#fbbf24'
+  const delta = page.geoScore != null && page.geoScoreAfter != null ? page.geoScoreAfter - page.geoScore : null
+  const scoreHtml = page.geoScore != null
+    ? \`<div style="display:flex;align-items:center;gap:12px;margin:8px 0 12px;flex-wrap:wrap;">
+        <span style="font-size:13px;color:#94a3b8;"><strong style="color:\${scoreColor};font-size:20px;">\${page.geoScore}</strong> ennen</span>
+        <span style="color:#475569;font-size:16px;">→</span>
+        <span style="font-size:13px;color:#94a3b8;"><strong style="color:\${afterColor};font-size:20px;">\${page.geoScoreAfter ?? '—'}</strong> jälkeen</span>
+        \${delta != null ? \`<span style="background:rgba(74,222,128,0.12);color:#4ade80;font-size:13px;font-weight:700;padding:2px 8px;border-radius:4px;">+\${delta} pistettä</span>\` : ''}
+        \${page.geoScoreAfter != null ? \`<div style="height:4px;background:#1e293b;border-radius:2px;width:100px;"><div style="height:4px;border-radius:2px;background:\${afterColor};width:\${Math.min(page.geoScoreAfter,100)}%;"></div></div>\` : ''}
+      </div>\`
+    : ''
+
+  const pid = escHtml(page.id)
+  const beforeAfterHtml = page.originalContent && page.optimizedContent
+    ? \`<div style="margin-top:12px;">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+          <span style="font-size:11px;color:#94a3b8;font-weight:600;text-transform:uppercase;letter-spacing:.05em;">Sisältö</span>
+          <button id="geo-diff-btn-\${pid}" onclick="showGeoDiff('\${pid}')" style="font-size:11px;padding:2px 10px;background:#1e293b;color:#7dd3fc;border:1px solid #334155;border-radius:4px;cursor:pointer;">Näytä muutokset</button>
+        </div>
+        <div id="geo-diff-\${pid}" style="display:none;background:#0f172a;border:1px solid #334155;border-radius:6px;padding:12px;font-size:12px;line-height:1.8;color:#e2e8f0;"></div>
+        <div id="geo-panels-\${pid}" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+          <div>
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+              <p style="font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em;margin:0;">Ennen</p>
+              <button onclick="copyGeoText(this,'\${pid}','before')" style="font-size:10px;padding:2px 8px;background:#1e293b;color:#94a3b8;border:1px solid #334155;border-radius:4px;cursor:pointer;">Kopioi</button>
+            </div>
+            <div id="geo-text-before-\${pid}" style="background:#0f172a;border:1px solid #334155;border-radius:6px;padding:10px 12px;font-size:12px;color:#94a3b8;line-height:1.6;font-style:italic;height:80px;overflow:hidden;">\${escHtml(page.originalContent)}</div>
+            <button onclick="toggleGeoText(this,'geo-text-before-\${pid}')" style="margin-top:4px;font-size:11px;color:#60a5fa;background:none;border:none;cursor:pointer;padding:0;">Näytä lisää</button>
+          </div>
+          <div>
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+              <p style="font-size:11px;font-weight:700;color:#22c55e;text-transform:uppercase;letter-spacing:.05em;margin:0;">Jälkeen</p>
+              <button id="geo-edit-btn-\${pid}" onclick="startGeoEdit('\${pid}')" style="font-size:10px;padding:2px 8px;background:#14532d;color:#86efac;border:1px solid #166534;border-radius:4px;cursor:pointer;">✎ Muokkaa</button>
+              <button onclick="copyGeoText(this,'\${pid}','after')" style="font-size:10px;padding:2px 8px;background:#14532d;color:#86efac;border:1px solid #166534;border-radius:4px;cursor:pointer;">Kopioi</button>
+            </div>
+            <div id="geo-text-after-\${pid}" style="background:#0f172a;border:1px solid #166534;border-radius:6px;padding:10px 12px;font-size:12px;color:#86efac;line-height:1.6;height:80px;overflow:hidden;">\${escHtml(page.optimizedContent)}</div>
+            <button onclick="toggleGeoText(this,'geo-text-after-\${pid}')" style="margin-top:4px;font-size:11px;color:#60a5fa;background:none;border:none;cursor:pointer;padding:0;">Näytä lisää</button>
+          </div>
+        </div>
+      </div>\`
+    : ''
+
+  const approveActions = page.status === 'ANALYZED'
+    ? \`<div style="display:flex;gap:8px;margin-top:14px;padding-top:12px;border-top:1px solid #1e293b;">
+        <button class="btn btn-primary btn-sm" onclick="geoApprove('\${page.id}')">Hyväksy</button>
+        <button class="btn btn-ghost btn-sm" onclick="geoReject('\${page.id}')">Hylkää</button>
+      </div>\`
     : page.status === 'APPROVED'
-    ? \`<button class="btn btn-primary btn-sm" onclick="geoPublish('\${page.id}')">Julkaise WP:hen</button>\`
+    ? \`<div style="display:flex;gap:8px;margin-top:14px;padding-top:12px;border-top:1px solid #1e293b;">
+        <button class="btn btn-primary btn-sm" onclick="geoPublish('\${page.id}')">Julkaise WP:hen</button>
+      </div>\`
     : ''
-  return \`<tr>
-    <td style="max-width:220px;"><a href="\${escHtml(page.url)}" target="_blank" style="color:#7dd3fc;font-weight:600;text-decoration:none;" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'">\${escHtml(page.title)}</a></td>
-    <td>\${geoScoreBadge(page.geoScore, page.geoScoreAfter)}</td>
-    <td>\${geoStatusBadge(page.status)}\${findingsHtml}</td>
-    <td style="white-space:nowrap;">\${actions}</td>
-  </tr>\`
+
+  const checkbox = page.status === 'ANALYZED'
+    ? \`<input type="checkbox" class="geo-page-select" data-page-id="\${escHtml(page.id)}" data-site-id="\${escHtml(page.siteId)}" style="width:15px;height:15px;cursor:pointer;accent-color:#3b82f6;flex-shrink:0;margin-top:3px;">\`
+    : \`<div style="width:15px;flex-shrink:0;"></div>\`
+
+  return \`<div style="background:#0f172a;border:1px solid #1e293b;border-radius:10px;padding:16px 18px;margin-bottom:12px;">
+    <div style="display:flex;align-items:flex-start;gap:10px;">
+      \${checkbox}
+      <div style="flex:1;min-width:0;">
+        \${geoStatusBadge(page.status)}
+        <a href="\${escHtml(page.url)}" target="_blank" style="display:block;color:#f1f5f9;font-weight:700;font-size:15px;text-decoration:none;margin:6px 0 0;" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'">\${escHtml(page.title)}</a>
+        \${page.url ? \`<a href="\${escHtml(page.url)}" target="_blank" style="font-size:11px;color:#64748b;text-decoration:none;display:block;margin:2px 0 0;" onmouseover="this.style.color='#7dd3fc'" onmouseout="this.style.color='#64748b'">\${escHtml(page.url)}</a>\` : ''}
+        \${scoreHtml}
+        \${findingsHtml}
+        \${citationsHtml}
+        \${beforeAfterHtml}
+        \${approveActions}
+      </div>
+    </div>
+  </div>\`
 }
 
 async function loadGeoSites() {
@@ -1732,34 +1946,34 @@ async function loadGeoSites() {
   if (!sites.length) { container.innerHTML = ''; empty.style.display = ''; return }
   empty.style.display = 'none'
 
+  const siteCount = document.getElementById('geo-site-count')
+  if (siteCount) siteCount.textContent = sites.length + ' sivustoa'
+
   container.innerHTML = sites.map(site => {
     const pendingCount = site.pages.filter(p => p.status === 'ANALYZED').length
     return \`<div style="background:#1e293b;border-radius:12px;margin-bottom:20px;overflow:hidden;">
-      <div style="padding:16px 20px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #334155;">
-        <div>
+      <div style="padding:14px 20px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #334155;" data-geo-site-id="\${escHtml(site.id)}" data-geo-site-url="\${escHtml(site.url)}">
+        <div style="display:flex;align-items:center;gap:10px;">
           <a href="\${escHtml(site.url)}" target="_blank" style="color:#60a5fa;font-weight:700;">\${escHtml(site.url)}</a>
-          <span style="margin-left:12px;font-size:12px;color:#94a3b8;">\${site.pages.length} sivua\${pendingCount ? \` · <strong style="color:#fbbf24;background:rgba(251,191,36,0.12);padding:1px 6px;border-radius:4px;">\${pendingCount} odottaa hyväksyntää</strong>\` : ''}</span>
+          <span style="font-size:12px;color:#94a3b8;">\${site.pages.length} sivua</span>
+          \${pendingCount ? \`<strong style="color:#fbbf24;background:rgba(251,191,36,0.12);padding:1px 8px;border-radius:4px;font-size:12px;">\${pendingCount} odottaa hyväksyntää</strong>\` : ''}
         </div>
-        <button class="btn btn-ghost btn-sm" onclick="refreshGeoSite('\${site.id}')">↻ Päivitä</button>
+        <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;">
+          \${pendingCount ? \`<button class="btn btn-primary btn-sm" onclick="geoApproveSelected('\${site.id}')">✓ Hyväksy valitut (\${pendingCount})</button>\` : ''}
+          <button class="btn btn-ghost btn-sm" onclick="refreshGeoSite('\${site.id}')">↻ Päivitä</button>
+          <button class="btn btn-ghost btn-sm" style="color:#f87171;" onclick="deleteGeoSite('\${site.id}')">✕ Poista</button>
+        </div>
       </div>
       \${site.lastError
-        ? \`<div style="padding:16px 20px;background:rgba(220,38,38,0.08);border-top:1px solid rgba(220,38,38,0.2);">
-            <p style="color:#fca5a5;font-size:13px;margin:0 0 4px;">⚠️ \${escHtml(site.lastError)}</p>
-            \${site.platform === 'squarespace' || site.platform === 'unknown'
-              ? \`<button class="btn btn-primary btn-sm" style="margin-top:8px;" onclick="showGeoManual('\${site.id}')">Syötä sisältö käsin (copy-paste)</button>\`
-              : ''}
+        ? \`<div style="padding:12px 20px;background:rgba(220,38,38,0.07);border-bottom:1px solid rgba(220,38,38,0.15);">
+            <span style="color:#fca5a5;font-size:12px;">⚠️ \${escHtml(site.lastError)}</span>
           </div>\`
-        : site.pages.length
-        ? \`<table style="width:100%;border-collapse:collapse;">
-            <thead><tr style="font-size:12px;color:#64748b;border-bottom:1px solid #334155;">
-              <th style="padding:10px 20px;text-align:left;font-size:11px;font-weight:700;color:#cbd5e1;text-transform:uppercase;letter-spacing:.05em;">Sivu</th>
-              <th style="padding:10px;text-align:left;font-size:11px;font-weight:700;color:#cbd5e1;text-transform:uppercase;letter-spacing:.05em;">GEO-pisteet</th>
-              <th style="padding:10px;text-align:left;font-size:11px;font-weight:700;color:#cbd5e1;text-transform:uppercase;letter-spacing:.05em;">Status / Havainnot</th>
-              <th style="padding:10px;text-align:left;font-size:11px;font-weight:700;color:#cbd5e1;text-transform:uppercase;letter-spacing:.05em;">Toiminnot</th>
-            </tr></thead>
-            <tbody>\${site.pages.map(geoPageRow).join('')}</tbody>
-          </table>\`
-        : \`<p style="padding:20px;color:#64748b;font-size:13px;">Analysointi käynnissä — päivitä sivu hetken kuluttua.</p>\`}
+        : ''}
+      <div style="padding:16px 20px;">
+        \${site.pages.length
+          ? site.pages.map(geoPageRow).join('')
+          : \`<p style="color:#64748b;font-size:13px;margin:0;">Analysointi käynnissä — päivitä sivu hetken kuluttua.</p>\`}
+      </div>
     </div>\`
   }).join('')
 }
@@ -1808,6 +2022,13 @@ async function refreshGeoSite(siteId) {
   showToast('Uudelleenanalyysi käynnistetty')
   setTimeout(loadGeoSites, 3000)
 }
+
+async function deleteGeoSite(siteId) {
+  if (!confirm('Poistetaanko sivusto ja kaikki sen analyysit?')) return
+  const res = await fetch(\`/api/geo/sites/\${siteId}\`, { method: 'DELETE' })
+  if (res.ok) { showToast('Sivusto poistettu'); loadGeoSites() }
+  else showToast('Virhe poistossa')
+}
 </script>
 </body>
 </html>`)
@@ -1850,11 +2071,24 @@ app.get('/api/geo/sites', async (_, res) => {
   res.json(sites)
 })
 
-// Päivitä sivun status (APPROVED / REJECTED)
+// Päivitä sivun status tai optimoitu sisältö
 app.patch('/api/geo/pages/:id', async (req, res) => {
-  const { status } = req.body
-  if (!['APPROVED', 'REJECTED'].includes(status)) return res.status(400).json({ error: 'Virheellinen status' })
-  await db.geoPage.update({ where: { id: req.params.id }, data: { status } })
+  const { status, optimizedContent } = req.body
+  const data: any = {}
+  if (status !== undefined) {
+    if (!['APPROVED', 'REJECTED'].includes(status)) return res.status(400).json({ error: 'Virheellinen status' })
+    data.status = status
+  }
+  if (optimizedContent !== undefined) data.optimizedContent = optimizedContent
+  if (!Object.keys(data).length) return res.status(400).json({ error: 'Ei päivitettävää' })
+  await db.geoPage.update({ where: { id: req.params.id }, data })
+  res.json({ ok: true })
+})
+
+// Poista GEO-sivusto ja sen sivut
+app.delete('/api/geo/sites/:id', async (req, res) => {
+  await db.geoPage.deleteMany({ where: { siteId: req.params.id } })
+  await db.geoSite.delete({ where: { id: req.params.id } })
   res.json({ ok: true })
 })
 
@@ -1865,6 +2099,9 @@ app.post('/api/geo/manual', async (req, res) => {
 
   const site = await db.geoSite.findUnique({ where: { id: siteId } })
   if (!site) return res.status(404).json({ error: 'Sivustoa ei löydy' })
+
+  // Tyhjennä virheviesti manuaalisen analyysin alkaessa
+  await db.geoSite.update({ where: { id: siteId }, data: { lastError: null } })
 
   // Luo sivu PENDING-tilaan ja lisää geo-jono käsittelemään se
   const page = await db.geoPage.create({

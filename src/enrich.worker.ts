@@ -7,13 +7,7 @@ import { browserPool } from './browser-pool'
 import { db } from './db/client'
 import { lookupYTJ } from './ytj'
 import { lookupKauppalehti } from './kauppalehti'
-
-// ── Scoring gate ──────────────────────────────────────────────────────────────
-// score < SCORE_MIN → liian rikki, ei jatketa
-// score > SCORE_MAX → ei ongelmia myytävänä, jo suodatettu scan.workerissa
-// score >= QUALIFIED_THRESHOLD + email → QUALIFIED → jatketaan outreachiin
-const SCORE_MIN           = 40
-const QUALIFIED_THRESHOLD = 70
+import { SCORE_MIN, QUALIFIED_THRESHOLD } from './config'
 
 async function processJob(job: Job<EnrichJobData>) {
   const { leadId, url, sendEmail, emailOverride } = job.data

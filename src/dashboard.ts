@@ -9,7 +9,8 @@ import { sendReport } from './mailer'
 import { discoverFromDuckDuckGo, discoverFromTranco, discoverFromYritykset, CATEGORIES } from './discovery/index'
 import { TOL_NAMES, TARGET_TOLS } from './ytj'
 import { runMonitor } from './monitor'
-import { addScanJob } from './queue'
+import { addScanJob, actionQueue } from './queue'
+import { msUntilNextSendWindow } from './config'
 
 const app = express()
 app.use(express.json())
@@ -212,42 +213,21 @@ app.post('/api/leads/:id/send', async (req, res) => {
   const emailTo = req.body.email || lead.email
   if (!emailTo) return res.status(400).json({ error: 'Sähköpostiosoite puuttuu' })
 
-  const scan = {
-    url: lead.domain.url,
-    score: lead.scan.score,
-    critical: lead.scan.critical,
-    serious: lead.scan.serious,
-    moderate: lead.scan.moderate,
-    minor: lead.scan.minor,
-    passed: lead.scan.passed,
-    violations: (() => { try { return JSON.parse(lead.scan.violations) } catch { return [] } })(),
-    timestamp: lead.scan.scannedAt.toISOString(),
-    pagesScanned: lead.scan.pagesScanned ?? 1,
-    pageBreakdown: lead.scan.pageBreakdown ? (() => { try { return JSON.parse(lead.scan.pageBreakdown!) } catch { return [] } })() : [],
-    smallTouchTargets: 0,
-    focusOutlineIssues: 0,
+  // Tallenna email leadille jos se muuttui
+  if (emailTo !== lead.email) {
+    await db.lead.update({ where: { id: lead.id }, data: { email: emailTo } })
   }
 
-  const pdf = lead.pdfPath && fs.existsSync(lead.pdfPath)
-    ? fs.readFileSync(lead.pdfPath)
-    : generatePdf(scan, SENDER_NAME, SENDER_URL)
+  const delay = msUntilNextSendWindow()
+  const scheduledAt = new Date(Date.now() + delay)
 
-  const reportUrl = `${SENDER_URL}/r/${lead.token}`
-  const optOutUrl = `${SENDER_URL}/opt-out/${lead.token}`
-  const pixelUrl  = `${SENDER_URL}/pixel/${lead.token}`
-
-  const benchmarkStats = await db.scan.aggregate({ _avg: { score: true }, _count: { id: true } })
-  const benchmark = benchmarkStats._count.id >= 10
-    ? { avg: Math.round(benchmarkStats._avg.score ?? 0), total: benchmarkStats._count.id }
-    : undefined
-
-  await sendReport({ to: emailTo, scan, reportUrl, optOutUrl, pixelUrl, aiSummary: lead.aiSummary, senderName: SENDER_NAME, senderUrl: SENDER_URL, benchmark })
-  await db.lead.update({
-    where: { id: lead.id },
-    data: { emailSent: true, sentAt: new Date(), email: emailTo },
+  await actionQueue.add('action', { leadId: lead.id, sendEmail: true }, {
+    attempts: 2,
+    backoff: { type: 'exponential', delay: 3000 },
+    delay,
   })
 
-  res.json({ ok: true })
+  res.json({ ok: true, scheduledAt: scheduledAt.toISOString() })
 })
 
 app.get('/api/leads/:id/pdf', async (req, res) => {
@@ -496,7 +476,7 @@ app.get('/r/:token', async (req, res) => {
 </head>
 <body>
 <div class="container">
-  <p style="color:#94a3b8;font-size:13px;margin:0 0 32px;">Analyysi generoitu ${new Date(scan.timestamp).toLocaleDateString('fi-FI')}</p>
+  <p style="color:#94a3b8;font-size:13px;margin:0 0 32px;">Lähetetty ${(lead.sentAt ?? lead.scan.scannedAt).toLocaleDateString('fi-FI')}</p>
 
   <h1>Sivustoanalyysi</h1>
   <p style="color:#94a3b8;margin:4px 0 32px;"><a href="${scan.url}" target="_blank">${scan.url}</a></p>
@@ -1514,8 +1494,12 @@ async function doSendEmail() {
   btn.textContent = 'Lähetä'
   btn.disabled = false
   closeModal()
-  if (res.ok) { showToast('Sähköposti lähetetty!'); await load() }
-  else showToast('Virhe lähetyksessä', true)
+  if (res.ok) {
+    const data = await res.json()
+    const sendTime = new Date(data.scheduledAt).toLocaleString('fi-FI', { timeZone: 'Europe/Helsinki', weekday: 'short', day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' })
+    showToast('Ajastettu: ' + sendTime)
+    await load()
+  } else showToast('Virhe lähetyksessä', true)
 }
 
 function showToast(msg, err = false) {
@@ -1693,7 +1677,8 @@ function geoStatusBadge(status) {
     ANALYZED:  ['#2563eb','Analysoitu'],
     APPROVED:  ['#16a34a','Hyväksytty'],
     REJECTED:  ['#dc2626','Hylätty'],
-    PUBLISHED: ['#7c3aed','Julkaistu'],
+    PUBLISHED:    ['#7c3aed','Julkaistu'],
+    ROLLED_BACK:  ['#b45309','Palautettu'],
   }
   const [color, label] = map[status] ?? ['#475569', status]
   return \`<span style="background:\${color};color:#fff;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700;">\${label}</span>\`
@@ -1852,6 +1837,13 @@ async function geoPublish(id) {
   else { const e = await res.json(); showToast('Virhe: ' + e.error) }
 }
 
+async function geoRollback(id, title) {
+  if (!confirm(\`Palautetaanko "\${title}" alkuperäiseen sisältöön WordPressissä?\`)) return
+  const res = await fetch(\`/api/geo/pages/\${id}/rollback\`, { method: 'POST' })
+  if (res.ok) { showToast('Palautettu alkuperäiseen!'); loadGeoSites() }
+  else { const e = await res.json(); showToast('Virhe: ' + e.error) }
+}
+
 function geoPageRow(page) {
   const analysis = page.analysis ? JSON.parse(page.analysis) : {}
   const findings = analysis.findings ?? []
@@ -1915,6 +1907,12 @@ function geoPageRow(page) {
     ? \`<div style="display:flex;gap:8px;margin-top:14px;padding-top:12px;border-top:1px solid #1e293b;">
         <button class="btn btn-primary btn-sm" onclick="geoPublish('\${page.id}')">Julkaise WP:hen</button>
       </div>\`
+    : page.status === 'PUBLISHED'
+    ? \`<div style="display:flex;gap:8px;margin-top:14px;padding-top:12px;border-top:1px solid #1e293b;">
+        <button class="btn btn-ghost btn-sm" style="color:#f87171;border-color:#f87171;" onclick="geoRollback('\${page.id}', '\${escHtml(page.title)}')">↩ Palauta alkuperäinen</button>
+      </div>\`
+    : page.status === 'ROLLED_BACK'
+    ? \`<div style="margin-top:14px;padding-top:12px;border-top:1px solid #1e293b;font-size:12px;color:#94a3b8;">Palautettu alkuperäiseen sisältöön.</div>\`
     : ''
 
   const checkbox = page.status === 'ANALYZED'
@@ -2038,6 +2036,26 @@ async function deleteGeoSite(siteId) {
 
 import { geoQueue } from './queue'
 
+// Sivut joita geo-agentti ei saa koskaan muokata
+const GEO_PROTECTED_SLUGS = [
+  'etusivu',
+  'saavutettavuusseloste',
+  'tietosuojaseloste',
+  'kaytto-ja-tilausehdot',
+  'a11y',
+  'yhteystiedot',
+]
+
+function extractSlug(url: string): string {
+  try {
+    const path = new URL(url).pathname
+    const parts = path.replace(/^\/|\/$/g, '').split('/')
+    return parts[parts.length - 1] ?? ''
+  } catch {
+    return ''
+  }
+}
+
 // Luo tai hae GeoSite, käynnistä analyysi
 app.post('/api/geo/analyze', async (req, res) => {
   const { url, wpUser, wpPassword } = req.body
@@ -2131,17 +2149,47 @@ app.post('/api/geo/pages/:id/publish', async (req, res) => {
   if (!page.wpPageId) return res.status(400).json({ error: 'Ei WordPress-sivua' })
   if (!page.optimizedContent) return res.status(400).json({ error: 'Ei optimoitua sisältöä' })
 
+  const slug = extractSlug(page.url)
+  if (GEO_PROTECTED_SLUGS.includes(slug)) {
+    return res.status(403).json({ error: `Sivu "${slug}" on suojattu — geo-agentti ei voi muokata sitä` })
+  }
+
   let baseUrl = page.site.url.replace(/\/$/, '')
   if (!/^https?:\/\//i.test(baseUrl)) baseUrl = 'https://' + baseUrl
 
   const token = Buffer.from(`${page.site.wpUser}:${page.site.wpPassword}`).toString('base64')
+
+  // Hae nykyinen WP-sisältö varmuuskopioksi ennen ylikirjoitusta
+  let backupContent: string | null = null
+  try {
+    const currentRes = await fetch(`${baseUrl}/wp-json/wp/v2/pages/${page.wpPageId}`, {
+      headers: { Authorization: `Basic ${token}` },
+    })
+    if (currentRes.ok) {
+      const currentData = await currentRes.json() as any
+      backupContent = currentData?.content?.raw ?? currentData?.content?.rendered ?? null
+    }
+  } catch { /* ei kriittinen — julkaisu jatkuu ilman backupia */ }
+
+  if (backupContent) {
+    await db.geoPage.update({ where: { id: page.id }, data: { backupContent } })
+  }
+
+  // Muunna plain text Gutenberg-kappaleblokkeiksi jotta sivun tyyli säilyy
+  const gutenbergContent = (page.optimizedContent ?? '')
+    .split(/\n\n+/)
+    .map(p => p.trim())
+    .filter(p => p.length > 0)
+    .map(p => `<!-- wp:paragraph -->\n<p>${p.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</p>\n<!-- /wp:paragraph -->`)
+    .join('\n\n')
+
   const wpRes = await fetch(`${baseUrl}/wp-json/wp/v2/pages/${page.wpPageId}`, {
     method: 'POST',
     headers: {
       Authorization: `Basic ${token}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ content: page.optimizedContent }),
+    body: JSON.stringify({ content: gutenbergContent }),
   })
 
   if (!wpRes.ok) {
@@ -2150,6 +2198,35 @@ app.post('/api/geo/pages/:id/publish', async (req, res) => {
   }
 
   await db.geoPage.update({ where: { id: page.id }, data: { status: 'PUBLISHED' } })
+  res.json({ ok: true })
+})
+
+// Palauta sivu varmuuskopiosta (backupContent → WordPress)
+app.post('/api/geo/pages/:id/rollback', async (req, res) => {
+  const page = await db.geoPage.findUnique({
+    where: { id: req.params.id },
+    include: { site: true },
+  })
+  if (!page) return res.status(404).json({ error: 'Sivua ei löydy' })
+  if (!page.wpPageId) return res.status(400).json({ error: 'Ei WordPress-sivua' })
+  if (!page.backupContent) return res.status(400).json({ error: 'Varmuuskopiota ei löydy — sivu ei ole julkaistu tämän järjestelmän kautta' })
+
+  let baseUrl = page.site.url.replace(/\/$/, '')
+  if (!/^https?:\/\//i.test(baseUrl)) baseUrl = 'https://' + baseUrl
+
+  const token = Buffer.from(`${page.site.wpUser}:${page.site.wpPassword}`).toString('base64')
+  const wpRes = await fetch(`${baseUrl}/wp-json/wp/v2/pages/${page.wpPageId}`, {
+    method: 'POST',
+    headers: { Authorization: `Basic ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ content: page.backupContent }),
+  })
+
+  if (!wpRes.ok) {
+    const err = await wpRes.text()
+    return res.status(500).json({ error: `WP-virhe: ${err.slice(0, 200)}` })
+  }
+
+  await db.geoPage.update({ where: { id: page.id }, data: { status: 'ROLLED_BACK' } })
   res.json({ ok: true })
 })
 

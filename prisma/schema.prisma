@@ -54,10 +54,11 @@ model GeoPage {
   url              String
   originalContent  String
   optimizedContent String?
+  backupContent    String?  // WP:n sisältö juuri ennen julkaisua — käytetään rollbackiin
   geoScore         Int?
   geoScoreAfter    Int?
   analysis         String?  // JSON: { findings[], suggestions[] }
-  status           String   @default("PENDING") // PENDING | ANALYZED | APPROVED | REJECTED | PUBLISHED
+  status           String   @default("PENDING") // PENDING | ANALYZED | APPROVED | REJECTED | PUBLISHED | ROLLED_BACK
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 }

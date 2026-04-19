@@ -25,6 +25,11 @@ Automaattinen saavutettavuusskanneri ja liidien hallintajärjestelmä WordPress-
 - **Rechtspraak-integraatio** — hakee WCAG/toegankelijkheid-tapaukset Hollannin tuomioistuimista (virallinen avoin API)
 - **Court Ticket -agentti** — Claude analysoi oikeustapaukset automaattisesti ja luo myyntitiketit: organisaatio, prioriteetti 0–10, ehdotettu yhteydenottokulma
 - **Kanteet-dashboard** — ⚖️ erillinen välilehti oikeuskanteille, status-seuranta (Uusi → Kontaktoitu → Konvertoitu)
+- **GEO-agentti** — optimoi WordPress-sivustojen sisältöä AI-hakukoneita varten (Perplexity, ChatGPT Search, Google AI Overviews). Analysoi GEO-pisteet, ehdottaa parannettua sisältöä ja julkaisee hyväksynnän jälkeen
+- **GEO-suojatut slugit** — estää geo-agentin muokkaamasta kriittisiä sivuja (etusivu, saavutettavuusseloste, tietosuojaseloste jne.)
+- **GEO-varmuuskopiointi** — hakee sivun raakasisällön (`context=edit`) ennen jokaista julkaisua ja tallentaa sen DB:hen rollbackia varten
+- **GEO-rollback** — palauttaa sivun varmuuskopiosta yhdellä napinpainalluksella jos muutos menee pieleen
+- **GEO-tyylitarkistus** — julkaisun jälkeen tarkistaa automaattisesti että `<style>`-tagit säilyivät; jos eivät, rollback tehdään automaattisesti
 
 ---
 
@@ -87,6 +92,7 @@ Avaa selaimessa: `http://localhost:3000`
 | **Uusi ajo** | Valitse lähde, toimialasuodatus, käynnistä live-lokilla |
 | **Seuranta** | HTML-muutosseuranta, automaattinen uudelleenskannaus |
 | **⚖️ Kanteet** | Oikeustapaukset FI + NL, AI-analyysi, prioriteetti, yhteydenottokulma, status-seuranta |
+| **🌐 GEO** | WordPress-sivustojen GEO-optimointi — lisää sivusto, analysoi sivut, hyväksy/hylkää muutokset, rollback |
 
 ### Komentorivi
 
@@ -128,6 +134,7 @@ src/
     rechtspraak.ts  — Rechtspraak.nl API (NL oikeustapaukset)
   court-ticket-agent.ts — Claude analysoi kanteet → tiketti DB:hen
   kanteet.ts        — runner: FI + NL haku + analyysi + tallennus
+  geo.worker.ts     — BullMQ-worker: GEO-pisteiden laskenta ja sisällön optimointi
 ```
 
 ### Skannauksen kulku

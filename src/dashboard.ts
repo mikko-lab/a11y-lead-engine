@@ -2159,15 +2159,20 @@ app.post('/api/geo/pages/:id/publish', async (req, res) => {
 
   const token = Buffer.from(`${page.site.wpUser}:${page.site.wpPassword}`).toString('base64')
 
-  // Hae nykyinen WP-sisältö varmuuskopioksi ennen ylikirjoitusta
+  // Hae nykyinen WP-sisältö varmuuskopioksi ennen ylikirjoitusta.
+  // context=edit on pakollinen — ilman sitä WP ei palauta content.raw eikä
+  // Gutenberg-lohkojen <!-- wp:html --> -kommentteja, jolloin backup on vain
+  // sanitoitua rendered-HTML:ää josta <style>-tagit on poistettu.
   let backupContent: string | null = null
+  let backupHasWpHtml = false
   try {
-    const currentRes = await fetch(`${baseUrl}/wp-json/wp/v2/pages/${page.wpPageId}`, {
+    const currentRes = await fetch(`${baseUrl}/wp-json/wp/v2/pages/${page.wpPageId}?context=edit`, {
       headers: { Authorization: `Basic ${token}` },
     })
     if (currentRes.ok) {
       const currentData = await currentRes.json() as any
-      backupContent = currentData?.content?.raw ?? currentData?.content?.rendered ?? null
+      backupContent = currentData?.content?.raw ?? null
+      backupHasWpHtml = typeof backupContent === 'string' && backupContent.includes('<!-- wp:html -->')
     }
   } catch { /* ei kriittinen — julkaisu jatkuu ilman backupia */ }
 
@@ -2195,6 +2200,28 @@ app.post('/api/geo/pages/:id/publish', async (req, res) => {
   if (!wpRes.ok) {
     const err = await wpRes.text()
     return res.status(500).json({ error: `WP-virhe: ${err.slice(0, 200)}` })
+  }
+
+  // Tarkista että julkaistu sivu ei menettänyt tyylejä.
+  // Jos alkuperäisessä oli <!-- wp:html --> (eli inline <style>-lohko),
+  // varmistetaan että <style-tagi löytyy renderöidystä HTML:stä.
+  // Jos ei löydy, rollback automaattisesti ennen kuin käyttäjä ehtii huomata.
+  if (backupHasWpHtml && backupContent) {
+    try {
+      const checkRes = await fetch(page.url, { headers: { 'Cache-Control': 'no-cache' } })
+      const html = await checkRes.text()
+      if (!html.includes('<style')) {
+        // Palauta backup ennen virheen palauttamista
+        await fetch(`${baseUrl}/wp-json/wp/v2/pages/${page.wpPageId}`, {
+          method: 'POST',
+          headers: { Authorization: `Basic ${token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ content: backupContent }),
+        })
+        return res.status(500).json({
+          error: 'Julkaisu peruttu: WordPress poisti <style>-tagit sisällöstä. Sivu palautettu varmuuskopiosta. Tarkista että sivun sisältö on tallennettu <!-- wp:html --> -lohkona.',
+        })
+      }
+    } catch { /* tarkistus epäonnistui — julkaisu hyväksytään */ }
   }
 
   await db.geoPage.update({ where: { id: page.id }, data: { status: 'PUBLISHED' } })

@@ -6,6 +6,7 @@ import { connection, AiJobData, actionQueue } from './queue'
 import { db } from './db/client'
 import { generateAiSummary, generateGeoSnippet } from './ai-summary'
 import { generatePdf } from './pdf'
+import { msUntilNextSendWindow } from './config'
 
 const REPORTS_DIR = path.join(process.cwd(), 'reports')
 if (!fs.existsSync(REPORTS_DIR)) fs.mkdirSync(REPORTS_DIR)
@@ -68,10 +69,16 @@ async function processJob(job: Job<AiJobData>) {
   })
 
   // 3. Ketjuta → action
+  const sendDelay = sendEmail !== false ? msUntilNextSendWindow() : 0
   await actionQueue.add('action', { leadId, sendEmail }, {
     attempts: 2,
     backoff: { type: 'exponential', delay: 3000 },
+    delay: sendDelay,
   })
+  if (sendDelay > 0) {
+    const sendAt = new Date(Date.now() + sendDelay)
+    console.log(`  Ajastettu lähetys: ${sendAt.toLocaleString('fi-FI', { timeZone: 'Europe/Helsinki' })}`)
+  }
 
   await job.updateProgress(100)
   return { leadId }

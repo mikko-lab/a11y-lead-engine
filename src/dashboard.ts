@@ -2259,7 +2259,7 @@ app.post('/api/geo/pages/:id/rollback', async (req, res) => {
 
 // ── Start ─────────────────────────────────────────────────────────────────────
 
-const PORT = process.env.DASHBOARD_PORT ?? 3030
-app.listen(PORT, () => {
+const PORT = Number(process.env.DASHBOARD_PORT ?? 3030)
+app.listen(PORT, '127.0.0.1', () => {
   console.log(`Dashboard käynnissä: http://localhost:${PORT}`)
 })

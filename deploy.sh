@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-SERVER="${DEPLOY_SERVER:?Aseta DEPLOY_SERVER-ympäristömuuttuja, esim. root@1.2.3.4}"
+SERVER="${DEPLOY_SERVER:?Aseta DEPLOY_SERVER-ympäristömuuttuja, esim. a11y@1.2.3.4}"
 REMOTE_DIR="/opt/a11y"
 
 echo "→ Synkataan tiedostot..."

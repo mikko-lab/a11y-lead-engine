@@ -2,6 +2,8 @@ import 'dotenv/config'
 import express from 'express'
 import path from 'path'
 import fs from 'fs'
+import dns from 'dns/promises'
+import basicAuth from 'express-basic-auth'
 import rateLimit from 'express-rate-limit'
 import { db } from './db/client'
 import { generatePdf } from './pdf'
@@ -24,6 +26,19 @@ app.use('/opt-out/', publicLimit)
 app.use('/pixel/', publicLimit)
 app.use('/api/', dashboardLimit)
 
+// Dashboard basic auth — kaikki /api/* ja GET / vaativat tunnistautumisen
+// Julkiset reitit (/r/, /opt-out/, /pixel/) on rekisteröity ennen tätä middlewarea
+if (!process.env.DASH_USER || !process.env.DASH_PASS) {
+  console.error('VAROITUS: DASH_USER tai DASH_PASS puuttuu .env:stä — dashboard ei ole suojattu!')
+}
+const dashAuth = basicAuth({
+  users: { [process.env.DASH_USER ?? 'admin']: process.env.DASH_PASS ?? '' },
+  challenge: true,
+  realm: 'A11Y Dashboard',
+})
+app.use('/api/', dashAuth)
+app.use(/^\/$/, dashAuth)
+
 const SENDER_NAME = process.env.SENDER_NAME ?? 'WP Saavutettavuus'
 const SENDER_URL  = process.env.SENDER_URL  ?? 'https://wpsaavutettavuus.fi'
 const REPORTS_DIR = path.join(process.cwd(), 'reports')
@@ -33,14 +48,33 @@ function sanitizeHtml(html: string): string {
   return html.replace(/<[^>]*>/g, '')
 }
 
-// Estää SSRF — hylkää sisäverkko-osoitteet ja ei-http-protokollat
-function isSafeUrl(urlStr: string): boolean {
+// Estää SSRF — hylkää sisäverkko-osoitteet, ei-http-protokollat ja DNS rebinding
+function isPrivateIp(ip: string): boolean {
+  // IPv4 loopback, private, link-local, cloud metadata, CGNAT
+  if (/^127\./.test(ip)) return true
+  if (/^(10\.|172\.(1[6-9]|2[0-9]|3[01])\.|192\.168\.)/.test(ip)) return true
+  if (/^169\.254\./.test(ip)) return true   // link-local + AWS/GCP metadata
+  if (/^100\.(6[4-9]|[7-9]\d|1[0-1]\d|12[0-7])\./.test(ip)) return true  // CGNAT 100.64/10
+  if (/^0\.0\.0\.0/.test(ip)) return true
+  // IPv6 loopback, link-local (fe80), unique local (fc/fd)
+  if (/^::1$/.test(ip)) return true
+  if (/^fe80:/i.test(ip)) return true
+  if (/^f[cd]/i.test(ip)) return true
+  return false
+}
+
+async function isSafeUrl(urlStr: string): Promise<boolean> {
   try {
     const { protocol, hostname } = new URL(urlStr)
     if (!['http:', 'https:'].includes(protocol)) return false
     const h = hostname.toLowerCase()
-    if (['localhost', '127.0.0.1', '::1', '0.0.0.0'].includes(h)) return false
-    if (/^(10\.|172\.(1[6-9]|2[0-9]|3[01])\.|192\.168\.)/.test(h)) return false
+    if (['localhost', '::1', '0.0.0.0'].includes(h)) return false
+    if (isPrivateIp(h)) return false
+    // DNS rebinding -suoja: resolvaa hostname ja tarkista kaikki IP:t
+    const addresses = await dns.lookup(h, { all: true }).catch(() => [])
+    for (const { address } of addresses) {
+      if (isPrivateIp(address)) return false
+    }
     return true
   } catch { return false }
 }
@@ -564,7 +598,7 @@ app.post('/api/scan/manual', async (req, res) => {
     return res.status(400).json({ error: 'Virheellinen URL' })
   }
 
-  if (!isSafeUrl(normalized)) return res.status(400).json({ error: 'URL ei ole sallittu' })
+  if (!await isSafeUrl(normalized)) return res.status(400).json({ error: 'URL ei ole sallittu' })
 
   await addScanJob({ url: normalized, sendEmail: false, source: 'Manuaalinen' })
   res.json({ ok: true, url: normalized })
@@ -2064,7 +2098,7 @@ app.post('/api/geo/analyze', async (req, res) => {
   let normalized = url.trim()
   if (!/^https?:\/\//i.test(normalized)) normalized = 'https://' + normalized
 
-  if (!isSafeUrl(normalized)) return res.status(400).json({ error: 'Ei sallittu URL' })
+  if (!await isSafeUrl(normalized)) return res.status(400).json({ error: 'Ei sallittu URL' })
 
   const site = await db.geoSite.upsert({
     where: { url: normalized },

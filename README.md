@@ -163,12 +163,12 @@ src/
 Lokaalisti:
 ```bash
 cd /path/to/a11y-lead-engine
-tar -czf a11y.tar.gz --exclude=node_modules --exclude=.git --exclude=reports src prisma package.json pnpm-lock.yaml && scp a11y.tar.gz root@<IP>:/opt/a11y/
+tar -czf a11y.tar.gz --exclude=node_modules --exclude=.git --exclude=reports src prisma package.json pnpm-lock.yaml && scp a11y.tar.gz a11y@<IP>:/opt/a11y/app/
 ```
 
 Palvelimella:
 ```bash
-cd /opt/a11y && tar -xzf a11y.tar.gz && chown -R root:root prisma/ && pnpm install && pnpm db:push --accept-data-loss && pm2 restart all --update-env
+cd /opt/a11y/app && tar -xzf a11y.tar.gz && chown -R a11y:a11y prisma/ && pnpm install && pnpm db:push && pm2 restart all --update-env
 ```
 
 > **Huom:** Jos `pnpm db:push` kysyy resetoinnista, vastaa N ja lisää puuttuvat kolumnit manuaalisesti `sqlite3`-komennolla.
@@ -179,6 +179,28 @@ cd /opt/a11y && tar -xzf a11y.tar.gz && chown -R root:root prisma/ && pnpm insta
 
 - `/r/:token` — asiakkaalle lähetettävä raporttisivu (ei vaadi kirjautumista)
 - `/opt-out/:token` — GDPR-poistumisilmoitus
+
+---
+
+## Tietoturva
+
+> **Redis-porttia (6379) ei saa altistaa internettiin.** Vanha palvelin kompromissoitiin juuri tästä syystä: Redis oli auki ilman salasanaa.
+
+### Pakolliset toimenpiteet ennen deployta
+
+1. **Generoi Redis-salasana:** `openssl rand -hex 32` → `REDIS_PASSWORD` .env:ään
+2. **Aseta dashboard-tunnukset:** `DASH_USER` ja vahva `DASH_PASS` .env:ään
+3. **Käytä ei-root-käyttäjää:** palvelimella `a11y`-käyttäjä, ei `root`
+4. **Redis kuuntelee vain localhostia:** `docker-compose.yml` on konfiguroitu `127.0.0.1:6379:6379`
+5. **Dashboard kuuntelee vain localhostia:** `app.listen(PORT, '127.0.0.1')` — käytä SSH-tunnelia tai reverse-proxyä
+
+### Tarkistuskomennot palvelimella
+
+```bash
+ss -tlnp | grep -E '6379|3030'   # molemmat pitää olla 127.0.0.1
+curl -i http://localhost:3030/api/stats           # → 401
+curl -i -u admin:salasana http://localhost:3030/api/stats  # → 200
+```
 
 ## Lisenssi
 

@@ -21,7 +21,8 @@
     "rechtspraak": "tsx src/rechtspraak-kanteet.ts",
     "kanteet": "tsx src/kanteet.ts",
     "vroegsignaal": "tsx src/toegankelijkheid-leads.ts",
-    "worker:geo": "tsx src/geo.worker.ts"
+    "worker:geo": "tsx src/geo.worker.ts",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.80.0",

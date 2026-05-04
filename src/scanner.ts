@@ -82,6 +82,15 @@ async function checkFocusOutlines(page: Page): Promise<number> {
   }).catch(() => 0)
 }
 
+export function calculateScore(
+  critical: number,
+  serious: number,
+  moderate: number,
+  minor: number,
+): number {
+  return Math.max(0, 100 - (critical * 20 + serious * 10 + moderate * 5 + minor * 2))
+}
+
 async function scanPageInBrowser(browser: Browser, url: string): Promise<ScanResult> {
   const page = await browser.newPage()
   await page.setExtraHTTPHeaders({ 'Accept-Language': 'fi-FI,fi;q=0.9' })
@@ -129,7 +138,7 @@ async function scanPageInBrowser(browser: Browser, url: string): Promise<ScanRes
     // Pienet kosketusmaalit lasketaan minor-tasolle
     const minor    = violations.filter((v) => v.impact === 'minor').length + smallTouchTargets
     const passed   = raw.passes.length
-    const score    = Math.max(0, 100 - (critical * 20 + serious * 10 + moderate * 5 + minor * 2))
+    const score    = calculateScore(critical, serious, moderate, minor)
 
     return {
       url,
@@ -221,7 +230,7 @@ export async function scanSite(url: string, sharedBrowser?: Browser): Promise<Sc
     const smallTouchTargets  = Math.max(...allResults.map((r) => r.smallTouchTargets))
     const focusOutlineIssues = Math.max(...allResults.map((r) => r.focusOutlineIssues))
 
-    const score = Math.max(0, 100 - (critical * 20 + serious * 10 + moderate * 5 + (minor + smallTouchTargets) * 2))
+    const score = calculateScore(critical, serious, moderate, minor + smallTouchTargets)
 
     const pageBreakdown: PageResult[] = allResults.map((r) => ({
       url: r.url, score: r.score, critical: r.critical,

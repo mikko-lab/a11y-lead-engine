@@ -13,6 +13,9 @@ rsync -az \
   --exclude '*.tar.gz' \
   . "$SERVER:$REMOTE_DIR/"
 
+echo "→ Korjataan tiedosto-oikeudet..."
+ssh "$SERVER" "chown -R a11y:a11y $REMOTE_DIR/src $REMOTE_DIR/package.json 2>/dev/null || true"
+
 echo "→ Asennetaan riippuvuudet ja päivitetään DB..."
 ssh "$SERVER" "cd $REMOTE_DIR && pnpm install --frozen-lockfile && pnpm db:push"
 

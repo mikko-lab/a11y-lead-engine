@@ -1,5 +1,6 @@
 import { chromium, Browser } from 'playwright'
 import { lookupKontakto, pickBestEmail } from './kontakto'
+import { cleanContactEmail, sameBrand } from './email-validation'
 
 const EMAIL_RE = /[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/g
 
@@ -23,13 +24,16 @@ export async function findEmail(baseUrl: string, sharedBrowser?: Browser): Promi
     wpRestEmail(baseUrl, domain),
   ])
 
-  // Palauta ensimmäinen onnistunut tulos prioriteettijärjestyksessä
+  // Palauta ensimmäinen API-tulos joka läpäisee validoinnin JA on saman brändin osoite
   for (const res of [kontaktoRes, hunterRes, wpRes]) {
-    if (res.status === 'fulfilled' && res.value) return res.value
+    if (res.status !== 'fulfilled' || !res.value) continue
+    const cleaned = cleanContactEmail(res.value)
+    if (cleaned && sameBrand(cleaned.split('@')[1], domain)) return cleaned
   }
 
-  // 4. Sivuston scrape varalla
-  return scrapeSite(baseUrl, sharedBrowser)
+  // 4. Sivuston scrape varalla — extractEmail hoitaa skoorauksen, aja vielä validointi
+  const scraped = await scrapeSite(baseUrl, sharedBrowser)
+  return cleanContactEmail(scraped)
 }
 
 async function hunterLookup(domain: string): Promise<string | null> {

@@ -10,8 +10,6 @@
     "worker:ai": "tsx src/ai.worker.ts",
     "worker:action": "tsx src/action.worker.ts",
     "worker:replies": "tsx src/reply-monitor.ts",
-    "worker:email": "tsx src/email.worker.ts",
-    "backfill:emails": "tsx src/backfillEmails.ts",
     "scheduler": "tsx src/scheduler.ts",
     "discover": "tsx src/cli.ts discover",
     "db:push": "prisma db push",

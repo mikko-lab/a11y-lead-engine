@@ -1,6 +1,5 @@
 import { chromium, Browser, Page } from 'playwright'
 import path from 'path'
-import { extractFromPage, type EmailCandidate } from './emailHarvester'
 
 const AXE_PATH = path.join(process.cwd(), 'node_modules/axe-core/axe.min.js')
 
@@ -39,7 +38,6 @@ export interface ScanResult {
   pageBreakdown: PageResult[]
   smallTouchTargets: number   // WCAG 2.5.8 — alle 24×24px klikattavat elementit
   focusOutlineIssues: number  // elementit joilla ei näkyvää focus-indikaattoria
-  emails?: EmailCandidate[]   // poimittu samasta renderöinnistä, ilmainen
 }
 
 const SUBPAGE_PATTERNS = [
@@ -142,9 +140,6 @@ async function scanPageInBrowser(browser: Browser, url: string): Promise<ScanRes
     const passed   = raw.passes.length
     const score    = calculateScore(critical, serious, moderate, minor)
 
-    // Sähköpostipoimi samasta jo renderöidystä sivusta — ei lisälatausta
-    const emails = await extractFromPage(page, url).catch(() => [])
-
     return {
       url,
       score, critical, serious, moderate,
@@ -156,7 +151,6 @@ async function scanPageInBrowser(browser: Browser, url: string): Promise<ScanRes
       pageBreakdown: [],
       smallTouchTargets,
       focusOutlineIssues,
-      emails,
     }
   } finally {
     await page.close()
@@ -244,14 +238,6 @@ export async function scanSite(url: string, sharedBrowser?: Browser): Promise<Sc
     }))
 
     // Kerää sähköpostit kaikilta skannatuilta sivuilta, paras confidence ensin
-    const allEmails = allResults.flatMap((r) => r.emails ?? []) as EmailCandidate[]
-    const emailMap = new Map<string, EmailCandidate>()
-    for (const e of allEmails) {
-      const ex = emailMap.get(e.email)
-      if (!ex || e.confidence > ex.confidence) emailMap.set(e.email, e)
-    }
-    const emails = [...emailMap.values()].sort((a, b) => b.confidence - a.confidence)
-
     return {
       url: normalized, score, critical, serious, moderate, minor, passed,
       violations: combinedViolations,
@@ -260,7 +246,6 @@ export async function scanSite(url: string, sharedBrowser?: Browser): Promise<Sc
       pageBreakdown,
       smallTouchTargets,
       focusOutlineIssues,
-      emails,
     }
   } finally {
     if (ownBrowser) await browser.close()

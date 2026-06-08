@@ -54,7 +54,7 @@ async function hunterLookup(domain: string): Promise<string | null> {
 
 // WordPress REST API: /wp-json/wp/v2/users paljastaa usein käyttäjänimet
 // Rakennetaan siitä sähköpostiehdokkaita etunimi.sukunimi@domain.fi
-async function wpRestEmail(baseUrl: string, domain: string): Promise<string | null> {
+async function wpRestEmail(baseUrl: string, _domain: string): Promise<string | null> {
   try {
     const res = await fetch(`${baseUrl.replace(/\/$/, '')}/wp-json/wp/v2/users?per_page=5`, {
       signal: AbortSignal.timeout(6000),
@@ -142,7 +142,7 @@ function emailScore(email: string, domain: string): number {
   return pts
 }
 
-function extractEmail(html: string, domain: string): string | null {
+export function extractEmail(html: string, domain: string): string | null {
   const text = deobfuscate(html)
 
   const mailtos = [...text.matchAll(/mailto:([a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,})/gi)]

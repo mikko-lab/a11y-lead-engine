@@ -11,7 +11,9 @@ Automaattinen saavutettavuusskanneri ja liidien hallintajärjestelmä WordPress-
 - **AI-yhteenveto** — Claude Haiku generoi selkokielisen tiivistelmän johtajalle suomeksi
 - **Web-raportti** — asiakkaalle lähetettävä raporttisivu (`/r/:token`), ei PDF-liitettä
 - **Sähköpostilähetys** — personoitu HTML-viesti, positiivinen sävy, GDPR-opt-out
-- **Sähköpostin etsintä** — Hunter.io → WP REST API → sivuston scrape (footer-first)
+- **Sähköpostin etsintä** — Kontakto.fi → Hunter.io → WP REST API → sivuston scrape (footer-first, domain-skooraus)
+- **Sähköpostin validointi** — yksi totuuslähde (`email-validation.ts`): suodattaa roska-, placeholder- ja asset-osoitteet, vaatii API-lähteiltä saman brändin domainin, normalisoi viallisen muotoilun (esim. URL-koodattu etuliite)
+- **Liidien siivous & kohdennus** — `clean:emails` validoi tallennetut osoitteet, `flag:bigorg` merkitsee isot organisaatiot / kirjaamot / kasinot optOut:iksi, `triage:emails` luokittelee rooli- vs henkilöosoitteet
 - **YTJ-integraatio** — yrityksen nimi, Y-tunnus ja TOL-toimialakoodi
 - **Kauppalehti-integraatio** — liikevaihto ja henkilöstömäärä
 - **Toimialasuodatus** — kohdista ajo valituille TOL-toimialoille
@@ -62,6 +64,7 @@ SENDER_URL=https://app.wpsaavutettavuus.fi
 
 ANTHROPIC_API_KEY=sk-ant-...
 HUNTER_API_KEY=...
+KONTAKTO_API_KEY=...
 BRAVE_SEARCH_API_KEY=...
 ```
 
@@ -69,17 +72,24 @@ BRAVE_SEARCH_API_KEY=...
 
 ## Käyttö
 
-### Dashboard (suositeltava)
+### Dashboard
 
 ```bash
-# Terminaali 1 — worker
-pnpm worker
-
-# Terminaali 2 — dashboard
-pnpm dev
+# Dashboard (UI + API)
+pnpm dashboard
 ```
 
 Avaa selaimessa: `http://localhost:3000`
+
+Worker-prosessit ajetaan tuotannossa pm2:lla (ks. `deploy.sh` → `pm2 restart all`). Kehityksessä käynnistä tarvittavat worker-skriptit erikseen:
+
+```bash
+pnpm worker:scan
+pnpm worker:enrich
+pnpm worker:ai
+pnpm worker:action
+pnpm worker:replies
+```
 
 | Välilehti | Kuvaus |
 |---|---|
@@ -101,40 +111,81 @@ pnpm kanteet --nl         # vain Hollanti (Rechtspraak)
 pnpm kanteet --sisalto    # hae myös tapausten koko teksti (parempi analyysi)
 ```
 
+### Sähköpostien hallinta
+
+```bash
+# Backfill: hae sähköpostit leadeille joilla email = null
+pnpm enrich:emails                  # min-score 40 (gate), koko joukko
+pnpm enrich:emails --limit=10       # savutesti oikeilla sivuilla ennen täyttä ajoa
+pnpm enrich:emails --min-score=0    # myös alle 40 pisteen leadit
+pnpm enrich:emails --concurrency=2  # kevyempi rinnakkaisuus
+
+# Siivous & kohdennus — DRY-RUN oletuksena, --apply kirjoittaa
+pnpm clean:emails                        # validoi tallennetut, näytä nollattavat/korjattavat
+pnpm clean:emails -- --apply
+pnpm clean:emails -- --keep-cross        # älä nollaa eri-brändin osoitteita
+pnpm flag:bigorg                         # merkitse isot org / kirjaamot / kasinot optOut:iksi
+pnpm flag:bigorg -- --apply
+pnpm triage:emails                       # rooli vs henkilö, lajiteltu org-koon mukaan
+```
+
 ---
 
 ## Arkkitehtuuri
 
 ```
 src/
-  dashboard.ts    — Express-palvelin, dashboard-UI, API, /r/:token, /opt-out/:token
-  worker.ts       — BullMQ-worker: skannaus, rikastus, AI-yhteenveto, lähetys
-  queue.ts        — Redis/BullMQ-jono ja ScanJobData-tyyppi
-  scanner.ts      — axe-core + Playwright -skannaus
-  prefilter.ts    — nopea esitarkistus + suurten toimijoiden blocklist
-  enrichment.ts   — sähköpostin etsintä (Hunter → WP REST API → scrape)
-  ai-summary.ts   — Claude Haiku -yhteenveto suomeksi
-  mailer.ts       — HTML-sähköpostipohja (MD→HTML, opt-out-linkki)
-  ytj.ts          — PRH open data (Y-tunnus, TOL)
-  kauppalehti.ts  — liikevaihto ja henkilöstö
-  monitor.ts      — HTML-muutosseuranta
-  pdf.ts          — PDF-raportti (sisäinen käyttö)
+  dashboard.ts        — Express: dashboard-UI, API, /r/:token, /opt-out/:token
+  queue.ts            — Redis/BullMQ-jonot (scan → enrich → ai → action) + job-tyypit
+  worker.ts           — pipeline-worker (legacy monoliitti, ei aktiivinen pm2:ssa)
+  scan.worker.ts      — BullMQ: skannausvaihe
+  enrich.worker.ts    — BullMQ: sähköposti + YTJ + Kauppalehti + scoring → ketjuttaa ai-jonoon
+  ai.worker.ts        — BullMQ: Claude Haiku -yhteenveto
+  action.worker.ts    — BullMQ: lähetyspäätös + sähköpostin lähetys
+  reply-monitor.ts    — seuraa saapuneita sähköpostivastauksia
+  scheduler.ts        — lähetysikkunan ajastus (arkiaamu 8–10, Helsinki)
+  browser-pool.ts     — jaettu Chromium, recycle 50 jobin välein
+  scanner.ts          — axe-core + Playwright -skannaus
+  prefilter.ts        — esitarkistus + suurten toimijoiden blocklist
+  enrichment.ts       — sähköpostin etsintä (Kontakto + Hunter + WP REST + scrape), validoitu
+  email-validation.ts — validoinnin totuuslähde: cleanContactEmail, brandOf/sameBrand, resolveContactEmail
+  kontakto.ts         — Kontakto.fi B2B-kontaktihaku
+  scoring-agent.ts    — Claude: liidin prioriteetti 0–10
+  ai-summary.ts       — Claude Haiku -yhteenveto suomeksi
+  mailer.ts           — HTML-sähköpostipohja (MD→HTML, opt-out-linkki)
+  ytj.ts              — PRH open data (Y-tunnus, TOL)
+  kauppalehti.ts      — liikevaihto ja henkilöstö
+  monitor.ts          — HTML-muutosseuranta
+  config.ts           — scoring gate -rajat, lähetysikkunan laskenta
+  pdf.ts              — PDF-raportti (sisäinen käyttö)
+  cli.ts              — komentorivi (scan, discover, monitor)
+  enrich-emails.ts    — backfill: email=null-leadit (kursori, concurrency, --limit, --min-score)
+  clean-emails.ts     — siivoa tallennetut osoitteet (dry-run, --apply, --keep-cross)
+  flag-bigorg.ts      — merkitse isot org / kirjaamot / kasinot optOut:iksi (dry-run, --apply)
+  triage-emails.ts    — luokittele rooli vs henkilö, lajittele org-koon mukaan
   discovery/
-    index.ts        — orchestraattori, lähdeseuranta
-    duckduckgo.ts   — WordPress-sivustojen haku
-    tranco.ts       — Tranco .fi -domainlista
-    yritykset.ts    — yritykset.fi -hakemistoscrape
-    finlex.ts       — Finlex-skräpperi (FI oikeustapaukset)
-    rechtspraak.ts  — Rechtspraak.nl API (NL oikeustapaukset)
-  court-ticket-agent.ts — Claude analysoi kanteet → tiketti DB:hen
-  kanteet.ts        — runner: FI + NL haku + analyysi + tallennus
+    index.ts            — orchestraattori, lähdeseuranta
+    duckduckgo.ts       — WordPress-sivustojen haku
+    tranco.ts           — Tranco .fi -domainlista
+    yritykset.ts        — yritykset.fi -hakemistoscrape
+    finlex.ts           — Finlex (FI oikeustapaukset)
+    rechtspraak.ts      — Rechtspraak.nl API (NL oikeustapaukset)
+    toegankelijkheid.ts — NL saavutettavuus-leadit
+  court-ticket-agent.ts — Claude analysoi kanteet → myyntitiketti DB:hen
+  kanteet.ts            — runner: FI + NL haku + analyysi + tallennus
+  finlex-kanteet.ts     — FI-kanteiden runner
+  rechtspraak-kanteet.ts — NL-kanteiden runner
+  toegankelijkheid-leads.ts — NL-liidien runner
+  db/client.ts          — Prisma-client
+  utils/normalize-url.ts — URL-normalisointi
+  __tests__/            — vitest (prefilter, scanner, extractEmail)
 ```
 
 ### Skannauksen kulku
 
 1. **Pre-filter** — onko sivu elossa, kieli fi, löytyykö CTA, blocklist
 2. **Skannaus** — axe-core / WCAG 2.2 AA Playwrightilla
-3. **Sähköpostin haku** — Hunter → WP REST API → scrape
+3. **Sähköpostin haku + validointi** — Kontakto/Hunter/WP REST/scrape; kaikki ehdokkaat `cleanContactEmail`-gaten läpi, API-lähteiltä vaaditaan sama brändi-domain
 4. **YTJ + Kauppalehti** — yritystiedot ja taloustiedot
 5. **Tallennus** — Prisma/SQLite (Domain, Scan, Lead)
 6. **AI-yhteenveto** — Claude Haiku, max 3 kohtaa suomeksi
@@ -160,16 +211,16 @@ src/
 
 ## Deploy (palvelimelle)
 
-Lokaalisti:
+Repon `deploy.sh` hoitaa synkan, riippuvuudet, DB-päivityksen ja uudelleenkäynnistyksen:
+
 ```bash
-cd /path/to/a11y-lead-engine
-tar -czf a11y.tar.gz --exclude=node_modules --exclude=.git --exclude=reports src prisma package.json pnpm-lock.yaml && scp a11y.tar.gz a11y@<IP>:/opt/a11y/app/
+DEPLOY_SERVER=a11y@<IP> ./deploy.sh
 ```
 
-Palvelimella:
-```bash
-cd /opt/a11y/app && tar -xzf a11y.tar.gz && chown -R a11y:a11y prisma/ && pnpm install && pnpm db:push && pm2 restart all --update-env
-```
+Skripti ajaa:
+1. `rsync` (poislukien `node_modules`, `.git`, `prisma/dev.db`, `.env`)
+2. `pnpm install --frozen-lockfile && pnpm db:push`
+3. `pm2 restart all`
 
 > **Huom:** Jos `pnpm db:push` kysyy resetoinnista, vastaa N ja lisää puuttuvat kolumnit manuaalisesti `sqlite3`-komennolla.
 

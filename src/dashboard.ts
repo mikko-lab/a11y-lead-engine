@@ -746,6 +746,7 @@ app.get('/', (_, res) => {
     <button class="btn btn-ghost btn-sm" onclick="load()">↻ Päivitä</button>
     <span id="bulk-bar" style="display:none;align-items:center;gap:8px;">
       <span id="bulk-count" style="font-size:13px;color:#94a3b8;"></span>
+      <button class="btn btn-primary btn-sm" id="bulk-send-btn" onclick="bulkSend()">Lähetä valitut</button>
       <button class="btn btn-sm" style="background:#431407;color:#fed7aa" onclick="bulkDelete()">Poista valitut</button>
       <button class="btn btn-ghost btn-sm" onclick="clearSelection()">Peruuta</button>
     </span>
@@ -1322,6 +1323,42 @@ async function bulkDelete() {
   })
   selectedIds.clear()
   await load()
+}
+
+async function bulkSend() {
+  const ids = [...selectedIds]
+  if (ids.length === 0) return
+
+  // Suodata leadit joilla on sähköposti
+  const toSend = ids.map(id => leads.find(l => l.id === id)).filter(l => l && l.email)
+  const noEmail = ids.length - toSend.length
+
+  let confirmMsg = \`Lähetetäänkö \${toSend.length} sähköpostia?\`
+  if (noEmail > 0) confirmMsg += \` (\${noEmail} jätetään väliin — ei sähköpostiosoitetta)\`
+  if (!confirm(confirmMsg)) return
+
+  const btn = document.getElementById('bulk-send-btn')
+  btn.disabled = true
+  btn.textContent = 'Lähetetään...'
+
+  let ok = 0, fail = 0
+  for (const lead of toSend) {
+    const res = await fetch(\`/api/leads/\${lead.id}/send\`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: lead.email })
+    })
+    if (res.ok) ok++
+    else fail++
+  }
+
+  btn.disabled = false
+  btn.textContent = 'Lähetä valitut'
+  clearSelection()
+  await load()
+
+  if (fail === 0) showToast(\`Ajastettu \${ok} sähköpostia seuraavaan lähetysikkunaan\`)
+  else showToast(\`\${ok} ajastettu, \${fail} epäonnistui\`, fail > 0)
 }
 
 function openNotes(id) {

@@ -93,6 +93,9 @@ async function processJob(job: Job<ScanJobData>) {
   const maxLeadNo = await db.lead.aggregate({ _max: { leadNo: true } })
   const nextLeadNo = (maxLeadNo._max.leadNo ?? 0) + 1
 
+  // Paras sähköposti skannauksesta (ei arvauksia tässä vaiheessa)
+  const bestEmail = scan.emails?.find((e) => e.source !== 'guessed' && e.confidence >= 60) ?? null
+
   const lead = await db.lead.create({
     data: {
       leadNo: nextLeadNo,
@@ -102,6 +105,11 @@ async function processJob(job: Job<ScanJobData>) {
       scoreDropAlert,
       status: 'SCANNED',
       lastScannedAt: new Date(),
+      ...(bestEmail ? {
+        email: bestEmail.email,
+        emailSource: bestEmail.source.toUpperCase(),
+        emailConfidence: bestEmail.confidence,
+      } : {}),
     },
   })
 

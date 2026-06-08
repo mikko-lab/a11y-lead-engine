@@ -136,6 +136,8 @@ model Lead {
   scanId              String    @unique
   scan                Scan      @relation(fields: [scanId], references: [id])
   email               String?
+  emailSource         String?   // 'MAILTO' | 'TEXT' | 'GUESSED'
+  emailConfidence     Int?      // 0–100
   emailSent           Boolean   @default(false)
   sentAt              DateTime?
   pdfPath             String?

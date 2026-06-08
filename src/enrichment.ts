@@ -76,6 +76,7 @@ async function wpRestEmail(baseUrl: string, domain: string): Promise<string | nu
 
 async function scrapeSite(baseUrl: string, sharedBrowser?: Browser): Promise<string | null> {
   const origin = baseUrl.replace(/\/$/, '')
+  const domain = new URL(baseUrl).hostname.replace(/^www\./, '')
   const ownBrowser = !sharedBrowser
   const browser = sharedBrowser ?? await chromium.launch({ headless: true, args: ['--no-sandbox'] })
 
@@ -84,18 +85,20 @@ async function scrapeSite(baseUrl: string, sharedBrowser?: Browser): Promise<str
 
     await page.goto(origin, { waitUntil: 'domcontentloaded', timeout: 15000 })
 
-    // Etsi footer-alueelta ensin (tiheä sähköpostipaikka)
-    const footerEmail = await page.evaluate(() => {
+    // Etsi footer-alueelta ensin — korkein luotettavuus, domain-skooraus mukana
+    const footerEmails: string[] = await page.evaluate(() => {
       const footer = document.querySelector('footer, #footer, .footer, .site-footer')
-      if (!footer) return null
-      const mailto = footer.querySelector('a[href^="mailto:"]')
-      if (mailto) return mailto.getAttribute('href')?.replace('mailto:', '') ?? null
-      return null
+      if (!footer) return []
+      return [...footer.querySelectorAll('a[href^="mailto:"]')]
+        .map((a) => (a as HTMLAnchorElement).href.replace(/^mailto:/i, '').split('?')[0].trim().toLowerCase())
     })
-    if (footerEmail) return footerEmail
+    const bestFooter = footerEmails
+      .filter((e) => !FAKE_EMAIL_RE.test(e) && !ASSET_EXT_RE.test(e) && e.length <= 254)
+      .sort((a, b) => emailScore(b, domain) - emailScore(a, domain))[0] ?? null
+    if (bestFooter) return bestFooter
 
     const homeHtml = await page.content()
-    const homeEmail = extractEmail(homeHtml)
+    const homeEmail = extractEmail(homeHtml, domain)
     if (homeEmail) return homeEmail
 
     for (const path of CONTACT_PATHS) {
@@ -103,7 +106,7 @@ async function scrapeSite(baseUrl: string, sharedBrowser?: Browser): Promise<str
         const res = await page.goto(origin + path, { waitUntil: 'domcontentloaded', timeout: 10000 })
         if (!res || res.status() >= 400) continue
         const html = await page.content()
-        const found = extractEmail(html)
+        const found = extractEmail(html, domain)
         if (found) return found
       } catch {
         continue
@@ -118,19 +121,42 @@ async function scrapeSite(baseUrl: string, sharedBrowser?: Browser): Promise<str
   }
 }
 
-const FAKE_EMAIL_RE = /noreply|no-reply|example|placeholder|esimerkki|test@test|foo@bar|lorem/i
+const FAKE_EMAIL_RE = /noreply|no-reply|donotreply|do-not-reply|example|placeholder|esimerkki|test@test|foo@bar|lorem|@sentry\.|wordpress@/i
+const ASSET_EXT_RE = /\.(png|jpe?g|gif|svg|webp|css|js|woff2?|ttf|eot|ico)$/i
+const FREE_MAIL_RE = /@(gmail|hotmail|outlook|yahoo|icloud|live|protonmail|me)\./i
+const ROLE_PREFIX_RE = /^(info|contact|hello|hei|myynti|asiakaspalvelu|sales|office|toimisto|yhteys|tuki|support)@/i
 
-function extractEmail(html: string): string | null {
-  const mailtoMatch = html.match(/mailto:([a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,})/)
-  if (mailtoMatch && !FAKE_EMAIL_RE.test(mailtoMatch[1])) return mailtoMatch[1]
+function deobfuscate(s: string): string {
+  return s
+    .replace(/\s*[\[(]\s*at\s*[\])]\s*/gi, '@')
+    .replace(/\s*[\[(]\s*ät\s*[\])]\s*/gi, '@')
+    .replace(/\s*[\[(]\s*(dot|piste)\s*[\])]\s*/gi, '.')
+}
 
-  const matches = html.match(EMAIL_RE) ?? []
-  const filtered = matches.filter(
-    (e) =>
-      !FAKE_EMAIL_RE.test(e) &&
-      !e.endsWith('.png') &&
-      !e.endsWith('.jpg') &&
-      !e.endsWith('.svg')
-  )
-  return filtered[0] ?? null
+function emailScore(email: string, domain: string): number {
+  const emailDomain = email.split('@')[1] ?? ''
+  let pts = 0
+  if (emailDomain === domain || emailDomain.endsWith('.' + domain)) pts += 10
+  if (ROLE_PREFIX_RE.test(email)) pts += 3
+  if (FREE_MAIL_RE.test(email)) pts -= 5
+  return pts
+}
+
+function extractEmail(html: string, domain: string): string | null {
+  const text = deobfuscate(html)
+
+  const mailtos = [...text.matchAll(/mailto:([a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,})/gi)]
+    .map((m) => m[1].toLowerCase())
+  const textMatches = (text.match(EMAIL_RE) ?? []).map((e) => e.toLowerCase())
+
+  const seen = new Set<string>()
+  const candidates = [...mailtos, ...textMatches].filter((e) => {
+    if (seen.has(e)) return false
+    seen.add(e)
+    return !FAKE_EMAIL_RE.test(e) && !ASSET_EXT_RE.test(e) && e.length <= 254
+  })
+
+  if (candidates.length === 0) return null
+  candidates.sort((a, b) => emailScore(b, domain) - emailScore(a, domain))
+  return candidates[0]
 }

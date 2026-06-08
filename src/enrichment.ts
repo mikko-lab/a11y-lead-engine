@@ -80,8 +80,9 @@ async function scrapeSite(baseUrl: string, sharedBrowser?: Browser): Promise<str
   const ownBrowser = !sharedBrowser
   const browser = sharedBrowser ?? await chromium.launch({ headless: true, args: ['--no-sandbox'] })
 
+  let page: import('playwright').Page | undefined
   try {
-    const page = await browser.newPage()
+    page = await browser.newPage()
 
     await page.goto(origin, { waitUntil: 'domcontentloaded', timeout: 15000 })
 
@@ -117,7 +118,8 @@ async function scrapeSite(baseUrl: string, sharedBrowser?: Browser): Promise<str
   } catch {
     return null
   } finally {
-    if (ownBrowser) await browser.close()
+    await page?.close().catch(() => {})
+    if (ownBrowser) await browser.close().catch(() => {})
   }
 }
 

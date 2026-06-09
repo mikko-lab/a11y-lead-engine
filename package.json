@@ -20,6 +20,7 @@
     "triage:emails": "tsx src/triage-emails.ts",
     "clean:emails": "tsx src/clean-emails.ts",
     "flag:bigorg": "tsx src/flag-bigorg.ts",
+    "requeue:enriched": "tsx src/requeue-enriched.ts",
     "finlex": "tsx src/finlex-kanteet.ts",
     "rechtspraak": "tsx src/rechtspraak-kanteet.ts",
     "kanteet": "tsx src/kanteet.ts",

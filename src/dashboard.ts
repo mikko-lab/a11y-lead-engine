@@ -13,6 +13,7 @@ import { TOL_NAMES, TARGET_TOLS } from './ytj'
 import { runMonitor } from './monitor'
 import { addScanJob, actionQueue } from './queue'
 import { msUntilNextSendWindow } from './config'
+import { requalifyIfEligible } from './qualify'
 
 const app = express()
 app.use(express.json())
@@ -250,6 +251,7 @@ app.post('/api/leads/:id/send', async (req, res) => {
   // Tallenna email leadille jos se muuttui
   if (emailTo !== lead.email) {
     await db.lead.update({ where: { id: lead.id }, data: { email: emailTo } })
+    await requalifyIfEligible(lead.id)
   }
 
   const delay = msUntilNextSendWindow()
@@ -300,7 +302,8 @@ app.patch('/api/leads/:id/email', async (req, res) => {
   if (!lead) return res.status(404).json({ error: 'Lead ei löydy' })
   const email = req.body.email?.trim() || null
   await db.lead.update({ where: { id: req.params.id }, data: { email } })
-  res.json({ ok: true })
+  const promoted = await requalifyIfEligible(req.params.id)
+  res.json({ ok: true, promoted })
 })
 
 app.delete('/api/leads/:id', async (req, res) => {

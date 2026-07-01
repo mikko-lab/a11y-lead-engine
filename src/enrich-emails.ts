@@ -3,6 +3,7 @@ import { chromium } from 'playwright'
 import { db } from './db/client'
 import { findEmail } from './enrichment'
 import { SCORE_MIN } from './config'
+import { requalifyIfEligible } from './qualify'
 
 /**
  * Backfill: hae sähköpostit leadeille joilla email = null.
@@ -38,6 +39,7 @@ async function processLead(lead: LeadRow, browser: import('playwright').Browser)
     if (email) {
       await db.lead.update({ where: { id: lead.id }, data: { email } })
       await db.domain.update({ where: { id: lead.domainId }, data: { email } })
+      await requalifyIfEligible(lead.id)
       return { url, email }
     }
     return { url, email: null as string | null }

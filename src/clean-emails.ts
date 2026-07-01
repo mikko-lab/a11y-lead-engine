@@ -1,6 +1,7 @@
 import 'dotenv/config'
 import { db } from './db/client'
 import { resolveContactEmail } from './email-validation'
+import { requalifyIfEligible } from './qualify'
 
 /**
  * Siivoaa tallennetut sähköpostit uuden validaattorin mukaan.
@@ -95,6 +96,7 @@ async function main() {
   for (const r of toFix) {
     await db.lead.update({ where: { id: r.id }, data: { email: r.to } })
     await db.domain.update({ where: { id: r.domainId }, data: { email: r.to } })
+    await requalifyIfEligible(r.id)
   }
 
   console.log(`\nValmis. Nollattu ${toNull.length}, korjattu ${toFix.length}.`)

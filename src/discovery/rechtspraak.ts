@@ -1,19 +1,27 @@
 /**
- * Rechtspraak.nl — Hollannin virallinen tuomioistuindata API
+ * Rechtspraak.nl — Hollannin virallinen tuomioistuindata
  *
- * Julkinen REST API, ei autentikointia, XML-formaatti.
- * Hollanti on ollut tiukka WCAG-vaatimusten toimeenpanossa — dataa löytyy.
+ * HUOM (2026-07): data.rechtspraak.nl/uitspraken/zoeken -avoin-data-API:n
+ * `q`-parametri EI suodata mitään — se palauttaa aina koko kannan tuoreimmat
+ * tapaukset riippumatta hakusanasta (todennettu: sama ResultCount kaikilla
+ * hakusanoilla, myös merkityksettömillä). Oikea vapaatekstihaku tehdään
+ * uitspraken.rechtspraak.nl:n omalla haku-API:lla (sama jota julkinen
+ * hakusivu käyttää), jonka pyyntörunko löytyi sivun JS-bundlesta.
  *
- * Docs: https://www.rechtspraak.nl/Uitspraken/Paginas/Open-Data.aspx
+ * Sisältöhaku (haeSisalto) käyttää edelleen virallista, dokumentoitua
+ * Open Data -content-endpointia (data.rechtspraak.nl) — se ei ole rikki.
  */
 
-const BASE = 'https://data.rechtspraak.nl/uitspraken'
+const SEARCH_URL = 'https://uitspraken.rechtspraak.nl/api/zoek'
+const CONTENT_BASE = 'https://data.rechtspraak.nl/uitspraken'
 
+// Moniosaiset hakusanat lainausmerkeissä = tarkka fraasihaku (muuten haku-
+// moottori tulkitsee välilyönnin OR:ksi ja tulokset ovat lähes satunnaisia).
 const HAKUSANAT = [
-  'digitale toegankelijkheid', // digitaalinen saavutettavuus
-  'webtoegankelijkheid',       // web-saavutettavuus
+  '"digitale toegankelijkheid"', // digitaalinen saavutettavuus
+  'webtoegankelijkheid',         // web-saavutettavuus
   'WCAG',
-  'EN 301 549',                // EU-standardi
+  '"EN 301 549"',                // EU-standardi
 ]
 
 export interface RechtspraakTapaus {
@@ -26,16 +34,55 @@ export interface RechtspraakTapaus {
   tiivistelma?: string
 }
 
-async function hae(url: string): Promise<string> {
-  const res = await fetch(url, {
+interface ZoekResult {
+  TitelEmphasis: string   // ECLI
+  Titel: string
+  DeeplinkUrl: string
+  Uitspraakdatum?: string
+  Tekstfragment?: string
+}
+
+interface ZoekResponse {
+  Results: ZoekResult[]
+  ResultCount: number
+}
+
+function uuid(): string {
+  // Node 19+ / globalThis.crypto — käytössä myös kaikissa modernissa Node LTS:ssä
+  return (globalThis as any).crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`
+}
+
+async function haeHakutulokset(term: string, maxPerHaku: number): Promise<ZoekResult[]> {
+  const body = {
+    StartRow: 0,
+    PageSize: maxPerHaku,
+    ShouldReturnHighlights: true,
+    ShouldCountFacets: true,
+    SortOrder: 'Relevance',
+    SearchTerms: [{ Term: term, Field: 'zt0' }],  // zt0 = "Alle velden"
+    Contentsoorten: [],
+    Rechtsgebieden: [],
+    Instanties: [],
+    DatumPublicatie: [],
+    DatumUitspraak: [],
+    Advanced: { PublicatieStatus: 'Ongedefinieerd' },
+    CorrelationId: uuid(),
+    Proceduresoorten: [],
+  }
+
+  const res = await fetch(SEARCH_URL, {
+    method: 'POST',
     headers: {
       'User-Agent': 'Mozilla/5.0 (compatible; a11y-kanteet-research/1.0)',
-      'Accept': 'application/xml, text/xml',
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
     },
+    body: JSON.stringify(body),
     signal: AbortSignal.timeout(10_000),
   })
-  if (!res.ok) throw new Error(`HTTP ${res.status}: ${url}`)
-  return res.text()
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  const json = await res.json() as ZoekResponse
+  return json.Results ?? []
 }
 
 function xmlArvo(xml: string, tagi: string): string | undefined {
@@ -43,51 +90,25 @@ function xmlArvo(xml: string, tagi: string): string | undefined {
   return re.exec(xml)?.[1]?.replace(/<[^>]+>/g, '').trim() || undefined
 }
 
-function xmlKaikki(xml: string, tagi: string): string[] {
-  const re = new RegExp(`<${tagi}[^>]*>([\\s\\S]*?)<\\/${tagi}>`, 'gi')
-  const tulokset: string[] = []
-  let m
-  while ((m = re.exec(xml)) !== null) {
-    const arvo = m[1].replace(/<[^>]+>/g, '').trim()
-    if (arvo) tulokset.push(arvo)
-  }
-  return tulokset
-}
-
-function parseHakutulokset(xml: string): Array<{ ecli: string; otsikko: string; pvm?: string; tiivistelma?: string }> {
-  const tulokset: Array<{ ecli: string; otsikko: string; pvm?: string; tiivistelma?: string }> = []
-
-  // RSS/Atom feed — jokainen tapaus on <item> tai <entry>
-  const itemRe = /<(?:item|entry)>([\s\S]*?)<\/(?:item|entry)>/gi
-  let m
-  while ((m = itemRe.exec(xml)) !== null) {
-    const blokki = m[1]
-
-    // ECLI löytyy <identifier> tai <id> tai <link>-tagista
-    const ecli =
-      xmlArvo(blokki, 'identifier') ??
-      xmlArvo(blokki, 'id') ??
-      blokki.match(/ECLI:NL:[A-Z0-9:]+/)?.[0]
-
-    if (!ecli || !ecli.startsWith('ECLI:')) continue
-
-    const otsikko = xmlArvo(blokki, 'title') ?? ecli
-    const pvm = xmlArvo(blokki, 'updated') ?? xmlArvo(blokki, 'pubDate') ?? xmlArvo(blokki, 'date')
-    const tiivistelma = xmlArvo(blokki, 'summary') ?? xmlArvo(blokki, 'description')
-
-    tulokset.push({ ecli, otsikko, pvm, tiivistelma })
-  }
-
-  return tulokset
-}
-
-function parseTapausSisalto(xml: string, ecli: string): Partial<RechtspraakTapaus> {
+function parseTapausSisalto(xml: string): Partial<RechtspraakTapaus> {
   return {
     tuomioistuin: xmlArvo(xml, 'instantie') ?? xmlArvo(xml, 'creator'),
     menettelytyyppi: xmlArvo(xml, 'procedure'),
     pvm: xmlArvo(xml, 'uitspraakdatum') ?? xmlArvo(xml, 'publicatiedatum'),
     tiivistelma: xmlArvo(xml, 'inhoudsindicatie')?.slice(0, 500),
   }
+}
+
+async function haeSisaltoXml(ecli: string): Promise<string> {
+  const res = await fetch(`${CONTENT_BASE}/content?id=${ecli}`, {
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (compatible; a11y-kanteet-research/1.0)',
+      'Accept': 'application/xml, text/xml',
+    },
+    signal: AbortSignal.timeout(10_000),
+  })
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  return res.text()
 }
 
 function sleep(ms: number) {
@@ -104,34 +125,32 @@ export async function scrapeRechtspraakKanteet(opts: {
   const nahty = new Set<string>()
 
   for (const sana of HAKUSANAT) {
-    const url = `${BASE}/zoeken?q=${encodeURIComponent(sana)}&max=${maxPerHaku}&type=Uitspraak&sort=DESC`
-    onProgress(`  Haetaan: "${sana}"`)
+    onProgress(`  Haetaan: ${sana}`)
 
     try {
-      const xml = await hae(url)
-      const tulokset = parseHakutulokset(xml)
+      const tulokset = await haeHakutulokset(sana, maxPerHaku)
       onProgress(`    → ${tulokset.length} tapausta`)
 
       for (const t of tulokset) {
-        if (nahty.has(t.ecli)) continue
-        nahty.add(t.ecli)
+        const ecli = t.TitelEmphasis
+        if (!ecli || nahty.has(ecli)) continue
+        nahty.add(ecli)
 
         const tapaus: RechtspraakTapaus = {
-          ecli: t.ecli,
-          otsikko: t.otsikko,
-          url: `${BASE}/content?id=${t.ecli}`,
-          pvm: t.pvm,
-          tiivistelma: t.tiivistelma,
+          ecli,
+          otsikko: t.Titel,
+          url: t.DeeplinkUrl ?? `${CONTENT_BASE}/content?id=${ecli}`,
+          pvm: t.Uitspraakdatum,
+          tiivistelma: t.Tekstfragment,
         }
 
         if (haeSisalto) {
           try {
             await sleep(500)
-            const sisaltoXml = await hae(tapaus.url)
-            const lisatiedot = parseTapausSisalto(sisaltoXml, t.ecli)
-            Object.assign(tapaus, lisatiedot)
+            const sisaltoXml = await haeSisaltoXml(ecli)
+            Object.assign(tapaus, parseTapausSisalto(sisaltoXml))
           } catch {
-            // Ohitetaan
+            // Ohitetaan sisältöhakuvirhe
           }
         }
 

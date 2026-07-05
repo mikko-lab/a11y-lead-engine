@@ -110,6 +110,11 @@ function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms))
 }
 
+// TODO: rekisterin ?status=-parametri ei suodata mitään (vahvistettu 2026-07-05: voldoet-niet,
+// eerste-maatregelen ja tyhjä parametri palauttavat kaikki byte-identtisen "viimeksi muutettu"
+// -listan) — jokainen rivi on silti oikein luokiteltu omasta tekstistään, joten data on
+// totuudenmukaista, mutta kohdennus D/C-tasoon vaatisi oikean suodattimen selvittämisen tai
+// client-side-suodatuksen ennen tallennusta.
 export async function scrapeToegang(opts: {
   statuses?: ComplianceStatus[]
   maxPages?: number

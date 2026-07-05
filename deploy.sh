@@ -2,7 +2,7 @@
 set -e
 
 SERVER="${DEPLOY_SERVER:?Aseta DEPLOY_SERVER-ympäristömuuttuja, esim. a11y@1.2.3.4}"
-REMOTE_DIR="/opt/a11y"
+REMOTE_DIR="/opt/a11y/app"
 
 echo "→ Synkataan tiedostot..."
 rsync -az \
